@@ -1,0 +1,23 @@
+src/builders/build_xml_string.rs
+  9ecafb799b293ca4 101,103,119,121,134,136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "32b7ea67f41a1453eb7f1d3522b1e8a7f4d69d91",
+  "prompts": {
+    "9ecafb799b293ca4": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7b9b1356-ff49-461f-9676-6a57d97f4355",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 3,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
