@@ -6,6 +6,8 @@
 
 Disassemble large XML files into smaller files and reassemble the original XML. Preserves the XML declaration, root namespace, and element order so that a full round-trip (disassemble → reassemble) reproduces the original file contents.
 
+> **Note:** This is a Rust implementation of the original [TypeScript xml-disassembler](https://github.com/mcarvin8/xml-disassembler).
+
 ## Features
 
 - **Disassemble** – Split a single XML file (or directory of XML files) into many smaller files, grouped by structure.
@@ -39,14 +41,32 @@ The binary will be at `target/release/xml-disassembler` (or `xml-disassembler.ex
 
 ```bash
 # Disassemble an XML file or directory (output written alongside the source)
-xml-disassembler disassemble <path>
+xml-disassembler disassemble <path> [options]
 
 # Reassemble a disassembled directory (writes one XML file next to the directory)
-xml-disassembler reassemble <path>
+xml-disassembler reassemble <path> [extension] [--postpurge]
 
 # Parse and rebuild a single XML file (useful for testing the parser)
 xml-disassembler parse <path>
 ```
+
+#### Disassemble options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--unique-id-elements <list>` | Comma-separated element names used to derive filenames for nested elements | (none) |
+| `--prepurge` | Remove existing disassembly output before running | false |
+| `--postpurge` | Delete original file/directory after disassembling | false |
+| `--ignore-path <path>` | Path to the ignore file | .xmldisassemblerignore |
+| `--format <fmt>` | Output format: xml, ini, json, json5, toml, yaml | xml |
+| `--strategy <name>` | unique-id or grouped-by-tag | unique-id |
+
+#### Reassemble options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `<extension>` | File extension/suffix for the rebuilt XML (e.g. permissionset-meta.xml) | xml |
+| `--postpurge` | Delete disassembled directory after successful reassembly | false |
 
 **Examples:**
 
@@ -54,8 +74,13 @@ xml-disassembler parse <path>
 xml-disassembler disassemble fixtures/general/HR_Admin.permissionset-meta.xml
 # Creates fixtures/general/HR_Admin/ with disassembled files
 
+xml-disassembler disassemble ./my.xml --format yaml --strategy grouped-by-tag --prepurge
+xml-disassembler disassemble ./my.xml --unique-id-elements "name,id" --postpurge
+
 xml-disassembler reassemble fixtures/general/HR_Admin
 # Creates fixtures/general/HR_Admin.xml
+
+xml-disassembler reassemble fixtures/general/HR_Admin permissionset-meta.xml --postpurge
 ```
 
 ### As a library
