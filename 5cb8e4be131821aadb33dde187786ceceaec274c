@@ -1,0 +1,23 @@
+src/main.rs
+  9ecafb799b293ca4 8-21,23-24,26-32,35-76,79-81,84-85,87-93,121-128,140-141,146-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "5cb8e4be131821aadb33dde187786ceceaec274c",
+  "prompts": {
+    "9ecafb799b293ca4": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7b9b1356-ff49-461f-9676-6a57d97f4355",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 97,
+      "total_deletions": 18,
+      "accepted_lines": 93,
+      "overriden_lines": 0
+    }
+  }
+}
