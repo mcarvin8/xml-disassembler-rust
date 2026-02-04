@@ -6,15 +6,14 @@ use serde_json::{Map, Value};
 
 fn is_nested_object(element: &Value) -> bool {
     if let Some(obj) = element.as_object() {
-        obj.keys().any(|k| !k.starts_with('#') && !k.starts_with('@') && k != "?xml")
+        obj.keys()
+            .any(|k| !k.starts_with('#') && !k.starts_with('@') && k != "?xml")
     } else {
         false
     }
 }
 
-pub async fn parse_element_unified(
-    params: XmlElementParams<'_>,
-) -> UnifiedParseResult {
+pub async fn parse_element_unified(params: XmlElementParams<'_>) -> UnifiedParseResult {
     let XmlElementParams {
         element,
         disassembled_path,

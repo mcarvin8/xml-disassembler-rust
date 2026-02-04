@@ -28,6 +28,7 @@ fn order_xml_element_keys(content: &Map<String, Value>, key_order: &[String]) ->
     Value::Object(ordered)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn disassemble_element_keys(
     root_element: &Value,
     key_order: &[String],
@@ -38,12 +39,7 @@ async fn disassemble_element_keys(
     unique_id_elements: Option<&str>,
     strategy: &str,
     format: &str,
-) -> (
-    Map<String, Value>,
-    XmlElementArrayMap,
-    usize,
-    bool,
-) {
+) -> (Map<String, Value>, XmlElementArrayMap, usize, bool) {
     let mut leaf_content = Map::new();
     let mut nested_groups = XmlElementArrayMap::new();
     let mut leaf_count = 0usize;
@@ -98,10 +94,7 @@ async fn disassemble_element_keys(
                 if strategy == "grouped-by-tag" {
                     if let Some(groups) = result.nested_groups {
                         for (tag, arr) in groups {
-                            nested_groups
-                                .entry(tag)
-                                .or_default()
-                                .extend(arr);
+                            nested_groups.entry(tag).or_default().extend(arr);
                         }
                     }
                 }
@@ -192,27 +185,21 @@ pub async fn build_disassembled_files_unified(
     }
     let key_order: Vec<String> = root_element
         .as_object()
-        .map(|o| {
-            o.keys()
-                .filter(|k| !k.starts_with('@'))
-                .cloned()
-                .collect()
-        })
+        .map(|o| o.keys().filter(|k| !k.starts_with('@')).cloned().collect())
         .unwrap_or_default();
 
-    let (leaf_content, nested_groups, leaf_count, has_nested_elements) =
-        disassemble_element_keys(
-            &root_element,
-            &key_order,
-            disassembled_path,
-            &root_element_name,
-            &root_attributes,
-            xml_declaration.as_ref(),
-            unique_id_elements,
-            strategy,
-            format,
-        )
-        .await;
+    let (leaf_content, nested_groups, leaf_count, has_nested_elements) = disassemble_element_keys(
+        &root_element,
+        &key_order,
+        disassembled_path,
+        &root_element_name,
+        &root_attributes,
+        xml_declaration.as_ref(),
+        unique_id_elements,
+        strategy,
+        format,
+    )
+    .await;
 
     if !has_nested_elements && leaf_count > 0 {
         log::error!(

@@ -27,9 +27,8 @@ fn write_element<W: std::io::Write>(
 
     match content {
         Value::Object(obj) => {
-            let (attrs, children): (Vec<_>, Vec<_>) = obj
-                .iter()
-                .partition(|(k, _)| k.starts_with('@'));
+            let (attrs, children): (Vec<_>, Vec<_>) =
+                obj.iter().partition(|(k, _)| k.starts_with('@'));
 
             let attr_name = |k: &str| k.trim_start_matches('@').to_string();
 
@@ -97,16 +96,12 @@ fn write_element<W: std::io::Write>(
                             }
                         }
                         _ => {
-                            writer.write_event(Event::Start(BytesStart::new(
-                                child_name.as_str(),
-                            )))?;
+                            writer
+                                .write_event(Event::Start(BytesStart::new(child_name.as_str())))?;
                             writer.write_event(Event::Text(BytesText::new(
-                                quick_xml::escape::escape(&value_to_string(child_value))
-                                    .as_ref(),
+                                quick_xml::escape::escape(&value_to_string(child_value)).as_ref(),
                             )))?;
-                            writer.write_event(Event::End(BytesEnd::new(
-                                child_name.as_str(),
-                            )))?;
+                            writer.write_event(Event::End(BytesEnd::new(child_name.as_str())))?;
                             if !is_last {
                                 writer.write_event(Event::Text(BytesText::new(
                                     format!("\n{}", child_indent).as_str(),
@@ -182,11 +177,7 @@ fn build_xml_from_object(
                     .unwrap_or("1.0");
                 let encoding = obj.get("@encoding").and_then(|v| v.as_str());
                 let standalone = obj.get("@standalone").and_then(|v| v.as_str());
-                writer.write_event(Event::Decl(BytesDecl::new(
-                    version,
-                    encoding,
-                    standalone,
-                )))?;
+                writer.write_event(Event::Decl(BytesDecl::new(version, encoding, standalone)))?;
             }
         }
     }

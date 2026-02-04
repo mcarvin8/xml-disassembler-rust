@@ -49,7 +49,10 @@ mod tests {
         });
         let attrs = extract_root_attributes(&element);
         let obj = attrs.as_object().unwrap();
-        assert_eq!(obj.get("@xmlns").and_then(|v| v.as_str()), Some("http://example.com"));
+        assert_eq!(
+            obj.get("@xmlns").and_then(|v| v.as_str()),
+            Some("http://example.com")
+        );
         assert_eq!(obj.get("@version").and_then(|v| v.as_str()), Some("1.0"));
         assert!(obj.get("child").is_none());
     }

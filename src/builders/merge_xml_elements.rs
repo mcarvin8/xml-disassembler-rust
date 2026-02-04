@@ -111,11 +111,7 @@ pub fn merge_xml_elements(elements: &[XmlElement]) -> Option<XmlElement> {
     }
 
     let first = &elements[0];
-    let root_key = first
-        .as_object()?
-        .keys()
-        .find(|k| *k != "?xml")?
-        .clone();
+    let root_key = first.as_object()?.keys().find(|k| *k != "?xml")?.clone();
     let mut merged_content = Map::new();
 
     for element in elements {
@@ -129,7 +125,11 @@ pub fn merge_xml_elements(elements: &[XmlElement]) -> Option<XmlElement> {
     }
 
     let declaration = first.as_object()?.get("?xml");
-    Some(build_final_xml_element(declaration, &root_key, merged_content))
+    Some(build_final_xml_element(
+        declaration,
+        &root_key,
+        merged_content,
+    ))
 }
 
 #[cfg(test)]
@@ -148,11 +148,14 @@ mod tests {
             "?xml": { "@version": "1.0", "@encoding": "UTF-8" },
             "Root": { "@xmlns": "http://example.com", "child": "a" }
         });
-        let merged = merge_xml_elements(&[el.clone()]).unwrap();
+        let merged = merge_xml_elements(std::slice::from_ref(&el)).unwrap();
         assert!(merged.get("?xml").is_some());
         let root = merged.get("Root").and_then(|v| v.as_object()).unwrap();
         assert_eq!(root.get("child").and_then(|v| v.as_str()), Some("a"));
-        assert_eq!(root.get("@xmlns").and_then(|v| v.as_str()), Some("http://example.com"));
+        assert_eq!(
+            root.get("@xmlns").and_then(|v| v.as_str()),
+            Some("http://example.com")
+        );
     }
 
     #[test]
@@ -163,7 +166,13 @@ mod tests {
         let root = merged.get("Root").and_then(|v| v.as_object()).unwrap();
         let sections = root.get("section").and_then(|v| v.as_array()).unwrap();
         assert_eq!(sections.len(), 2);
-        assert_eq!(sections[0].get("name").and_then(|v| v.as_str()), Some("first"));
-        assert_eq!(sections[1].get("name").and_then(|v| v.as_str()), Some("second"));
+        assert_eq!(
+            sections[0].get("name").and_then(|v| v.as_str()),
+            Some("first")
+        );
+        assert_eq!(
+            sections[1].get("name").and_then(|v| v.as_str()),
+            Some("second")
+        );
     }
 }

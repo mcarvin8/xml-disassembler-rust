@@ -1,6 +1,8 @@
 //! Get transformer for format - returns output string from XmlElement.
 
-use crate::transformers::{transform_to_ini, transform_to_json, transform_to_json5, transform_to_toml, transform_to_yaml};
+use crate::transformers::{
+    transform_to_ini, transform_to_json, transform_to_json5, transform_to_toml, transform_to_yaml,
+};
 use crate::types::XmlElement;
 
 /// Transform XmlElement to string in the given format.

@@ -46,6 +46,7 @@ impl DisassembleXmlFileHandler {
             .unwrap_or(false)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn disassemble(
         &mut self,
         file_path: &str,
@@ -60,7 +61,10 @@ impl DisassembleXmlFileHandler {
         let strategy = if ["unique-id", "grouped-by-tag"].contains(&strategy) {
             strategy
         } else {
-            log::warn!("Unsupported strategy \"{}\", defaulting to \"unique-id\".", strategy);
+            log::warn!(
+                "Unsupported strategy \"{}\", defaulting to \"unique-id\".",
+                strategy
+            );
             "unique-id"
         };
 
@@ -69,23 +73,36 @@ impl DisassembleXmlFileHandler {
         let path = Path::new(file_path);
         let meta = fs::metadata(path).await?;
         let cwd = std::env::current_dir().unwrap_or_else(|_| Path::new(".").to_path_buf());
-        let relative_path = path
-            .strip_prefix(&cwd)
-            .unwrap_or(path)
-            .to_string_lossy();
+        let relative_path = path.strip_prefix(&cwd).unwrap_or(path).to_string_lossy();
         let relative_path = Self::posix_path(&relative_path);
 
         if meta.is_file() {
-            self.handle_file(file_path, &relative_path, unique_id_elements, strategy, pre_purge, post_purge, format)
-                .await?;
+            self.handle_file(
+                file_path,
+                &relative_path,
+                unique_id_elements,
+                strategy,
+                pre_purge,
+                post_purge,
+                format,
+            )
+            .await?;
         } else if meta.is_dir() {
-            self.handle_directory(file_path, unique_id_elements, strategy, pre_purge, post_purge, format)
-                .await?;
+            self.handle_directory(
+                file_path,
+                unique_id_elements,
+                strategy,
+                pre_purge,
+                post_purge,
+                format,
+            )
+            .await?;
         }
 
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle_file(
         &self,
         file_path: &str,
@@ -96,11 +113,16 @@ impl DisassembleXmlFileHandler {
         post_purge: bool,
         format: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let resolved = Path::new(file_path).canonicalize().unwrap_or_else(|_| Path::new(file_path).to_path_buf());
+        let resolved = Path::new(file_path)
+            .canonicalize()
+            .unwrap_or_else(|_| Path::new(file_path).to_path_buf());
         let resolved_str = resolved.to_string_lossy();
 
         if !Self::is_xml_file(&resolved_str) {
-            log::error!("The file path provided is not an XML file: {}", resolved_str);
+            log::error!(
+                "The file path provided is not an XML file: {}",
+                resolved_str
+            );
             return Ok(());
         }
 
@@ -163,6 +185,7 @@ impl DisassembleXmlFileHandler {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn process_file(
         &self,
         dir_path: &str,

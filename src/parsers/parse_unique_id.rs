@@ -45,10 +45,7 @@ fn find_nested_field_match(element: &XmlElement, unique_id_elements: &str) -> Op
 }
 
 /// Get a unique ID for an element, using configured fields or a hash.
-pub fn parse_unique_id_element(
-    element: &XmlElement,
-    unique_id_elements: Option<&str>,
-) -> String {
+pub fn parse_unique_id_element(element: &XmlElement, unique_id_elements: Option<&str>) -> String {
     if let Some(ids) = unique_id_elements {
         let field_names: Vec<&str> = ids.split(',').map(|s| s.trim()).collect();
         find_direct_field_match(element, &field_names)

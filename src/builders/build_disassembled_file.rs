@@ -34,12 +34,13 @@ pub async fn build_disassembled_file(
 
     let file_name = if let Some(name) = output_file_name {
         name.to_string()
-    } else if wrap_key.is_some()
-        && !is_grouped_array
-        && content.is_object()
-    {
-        let id = parse_unique_id_element(&content, unique_id_elements);
-        format!("{}.{}-meta.{}", id, wrap_key.unwrap(), format)
+    } else if let Some(wk) = wrap_key {
+        if !is_grouped_array && content.is_object() {
+            let id = parse_unique_id_element(&content, unique_id_elements);
+            format!("{}.{}-meta.{}", id, wk, format)
+        } else {
+            "output".to_string()
+        }
     } else {
         "output".to_string()
     };

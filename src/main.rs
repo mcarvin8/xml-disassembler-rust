@@ -1,7 +1,9 @@
 //! XML Disassembler CLI - Disassemble large XML files into smaller files and reassemble.
 
-use xml_disassembler::{parse_xml, build_xml_string, DisassembleXmlFileHandler, ReassembleXmlFileHandler};
 use std::env;
+use xml_disassembler::{
+    build_xml_string, parse_xml, DisassembleXmlFileHandler, ReassembleXmlFileHandler,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

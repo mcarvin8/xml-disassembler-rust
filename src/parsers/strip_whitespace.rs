@@ -52,14 +52,20 @@ mod tests {
         let result = strip_whitespace_text_nodes(&input);
         let arr = result.as_array().unwrap();
         assert_eq!(arr.len(), 1);
-        assert_eq!(arr[0].get("#text").and_then(|v| v.as_str()), Some("keep me"));
+        assert_eq!(
+            arr[0].get("#text").and_then(|v| v.as_str()),
+            Some("keep me")
+        );
     }
 
     #[test]
     fn preserves_non_empty_text() {
         let input = json!({ "#text": "  content  " });
         let result = strip_whitespace_text_nodes(&input);
-        assert_eq!(result.get("#text").and_then(|v| v.as_str()), Some("  content  "));
+        assert_eq!(
+            result.get("#text").and_then(|v| v.as_str()),
+            Some("  content  ")
+        );
     }
 
     #[test]

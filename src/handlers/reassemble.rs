@@ -2,10 +2,19 @@
 
 use crate::builders::{build_xml_string, merge_xml_elements, reorder_root_keys};
 use crate::parsers::parse_to_xml_object;
+use crate::types::XmlElement;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use tokio::fs;
+
+type ProcessDirFuture<'a> = Pin<
+    Box<
+        dyn Future<Output = Result<Vec<XmlElement>, Box<dyn std::error::Error + Send + Sync>>>
+            + Send
+            + 'a,
+    >,
+>;
 
 pub struct ReassembleXmlFileHandler;
 
@@ -25,7 +34,9 @@ impl ReassembleXmlFileHandler {
         }
 
         log::debug!("Parsing directory to reassemble: {}", file_path);
-        let parsed_objects = self.process_files_in_directory(file_path.to_string()).await?;
+        let parsed_objects = self
+            .process_files_in_directory(file_path.to_string())
+            .await?;
 
         if parsed_objects.is_empty() {
             log::error!(
@@ -64,10 +75,7 @@ impl ReassembleXmlFileHandler {
         Ok(())
     }
 
-    fn process_files_in_directory<'a>(
-        &'a self,
-        dir_path: String,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<crate::types::XmlElement>, Box<dyn std::error::Error + Send + Sync>>> + Send + 'a>> {
+    fn process_files_in_directory<'a>(&'a self, dir_path: String) -> ProcessDirFuture<'a> {
         Box::pin(async move {
             let mut parsed = Vec::new();
             let mut entries = Vec::new();
@@ -76,8 +84,22 @@ impl ReassembleXmlFileHandler {
                 entries.push(entry);
             }
             entries.sort_by(|a, b| {
-                let a_base: String = a.file_name().to_str().unwrap_or("").split('.').next().unwrap_or("").to_string();
-                let b_base: String = b.file_name().to_str().unwrap_or("").split('.').next().unwrap_or("").to_string();
+                let a_base: String = a
+                    .file_name()
+                    .to_str()
+                    .unwrap_or("")
+                    .split('.')
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                let b_base: String = b
+                    .file_name()
+                    .to_str()
+                    .unwrap_or("")
+                    .split('.')
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
                 a_base.cmp(&b_base)
             });
 
@@ -113,7 +135,10 @@ impl ReassembleXmlFileHandler {
             || lower.ends_with(".ini")
     }
 
-    async fn validate_directory(&self, path: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    async fn validate_directory(
+        &self,
+        path: &str,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         let meta = fs::metadata(path).await?;
         if !meta.is_dir() {
             log::error!(
@@ -128,9 +153,15 @@ impl ReassembleXmlFileHandler {
     fn get_output_path(&self, dir_path: &str, extension: Option<&str>) -> String {
         let path = Path::new(dir_path);
         let parent = path.parent().unwrap_or(Path::new("."));
-        let base_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("output");
+        let base_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("output");
         let ext = extension.unwrap_or("xml");
-        parent.join(format!("{}.{}", base_name, ext)).to_string_lossy().to_string()
+        parent
+            .join(format!("{}.{}", base_name, ext))
+            .to_string_lossy()
+            .to_string()
     }
 }
 

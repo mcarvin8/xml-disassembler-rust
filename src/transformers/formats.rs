@@ -40,7 +40,9 @@ fn convert_json_to_toml_value(v: &Value) -> toml::Value {
             }
         }
         Value::String(s) => toml::Value::String(s.clone()),
-        Value::Array(arr) => toml::Value::Array(arr.iter().map(convert_json_to_toml_value).collect()),
+        Value::Array(arr) => {
+            toml::Value::Array(arr.iter().map(convert_json_to_toml_value).collect())
+        }
         Value::Object(obj) => {
             let mut table = toml::map::Map::new();
             for (k, v) in obj {

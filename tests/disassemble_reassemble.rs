@@ -47,25 +47,17 @@ async fn disassemble_then_reassemble_matches_original_xml() {
 
     let reassemble_handler = ReassembleXmlFileHandler::new();
     reassemble_handler
-        .reassemble(
-            disassembled_dir.to_str().unwrap(),
-            Some("xml"),
-            false,
-        )
+        .reassemble(disassembled_dir.to_str().unwrap(), Some("xml"), false)
         .await
         .expect("reassemble");
 
     let reassembled_path = base.join("HR_Admin.xml");
-    assert!(
-        reassembled_path.exists(),
-        "Reassembled file should exist"
-    );
+    assert!(reassembled_path.exists(), "Reassembled file should exist");
 
     let reassembled_content = std::fs::read_to_string(&reassembled_path).expect("read reassembled");
 
     assert_eq!(
-        original_content,
-        reassembled_content,
+        original_content, reassembled_content,
         "Reassembled XML must match original file contents (round-trip)"
     );
 }
