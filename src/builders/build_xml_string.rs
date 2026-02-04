@@ -98,8 +98,9 @@ fn write_element<W: std::io::Write>(
                         _ => {
                             writer
                                 .write_event(Event::Start(BytesStart::new(child_name.as_str())))?;
+                            // BytesText::new() expects unescaped content; the writer escapes when writing
                             writer.write_event(Event::Text(BytesText::new(
-                                quick_xml::escape::escape(&value_to_string(child_value)).as_ref(),
+                                value_to_string(child_value).as_str(),
                             )))?;
                             writer.write_event(Event::End(BytesEnd::new(child_name.as_str())))?;
                             if !is_last {
@@ -115,8 +116,9 @@ fn write_element<W: std::io::Write>(
                     format!("\n{}", indent).as_str(),
                 )))?;
             } else if !text_content.is_empty() {
+                // BytesText::new() expects unescaped content; the writer escapes when writing
                 writer.write_event(Event::Text(BytesText::new(
-                    quick_xml::escape::escape(&text_content).as_ref(),
+                    text_content.as_str(),
                 )))?;
             }
 
@@ -129,8 +131,9 @@ fn write_element<W: std::io::Write>(
         }
         _ => {
             writer.write_event(Event::Start(BytesStart::new(name)))?;
+            // BytesText::new() expects unescaped content; the writer escapes when writing
             writer.write_event(Event::Text(BytesText::new(
-                quick_xml::escape::escape(&value_to_string(content)).as_ref(),
+                value_to_string(content).as_str(),
             )))?;
             writer.write_event(Event::End(BytesEnd::new(name)))?;
         }
