@@ -117,9 +117,7 @@ fn write_element<W: std::io::Write>(
                 )))?;
             } else if !text_content.is_empty() {
                 // BytesText::new() expects unescaped content; the writer escapes when writing
-                writer.write_event(Event::Text(BytesText::new(
-                    text_content.as_str(),
-                )))?;
+                writer.write_event(Event::Text(BytesText::new(text_content.as_str())))?;
             }
 
             writer.write_event(Event::End(BytesEnd::new(name)))?;
