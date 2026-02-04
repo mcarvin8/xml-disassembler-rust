@@ -1,0 +1,35 @@
+src/builders/build_disassembled_files.rs
+  9ecafb799b293ca4 31
+src/builders/merge_xml_elements.rs
+  9ecafb799b293ca4 151
+src/handlers/disassemble.rs
+  9ecafb799b293ca4 49,105,188
+src/transformers/formats.rs
+  9ecafb799b293ca4 1-42,44,46-77
+src/handlers/reassemble.rs
+  9ecafb799b293ca4 5,11-17,78
+src/transformers/mod.rs
+  9ecafb799b293ca4 1,4,7
+src/builders/build_disassembled_file.rs
+  9ecafb799b293ca4 37-38,40-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "46afa7e40cc6f89b9447dc85e9debb27b0c921ac",
+  "prompts": {
+    "9ecafb799b293ca4": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7b9b1356-ff49-461f-9676-6a57d97f4355",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 104,
+      "total_deletions": 20,
+      "accepted_lines": 99,
+      "overriden_lines": 1
+    }
+  }
+}
