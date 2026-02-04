@@ -1,0 +1,79 @@
+src/transformers/get_transformer.rs
+  9ecafb799b293ca4 1-18
+README.md
+  9ecafb799b293ca4 7-15,17-28,30-89,91-93,95-96
+tests/disassemble_reassemble.rs
+  9ecafb799b293ca4 1-71
+Cargo.toml
+  9ecafb799b293ca4 1-5,7-28
+src/parsers/parse_unique_id.rs
+  9ecafb799b293ca4 1-60
+src/builders/merge_xml_elements.rs
+  9ecafb799b293ca4 1-169
+src/handlers/reassemble.rs
+  9ecafb799b293ca4 1-141
+src/transformers/mod.rs
+  9ecafb799b293ca4 1-7
+src/constants.rs
+  9ecafb799b293ca4 1-4
+src/builders/mod.rs
+  9ecafb799b293ca4 1-11
+src/parsers/parse_xml.rs
+  9ecafb799b293ca4 1-125
+src/types.rs
+  9ecafb799b293ca4 1-88
+src/utils/async_queue.rs
+  9ecafb799b293ca4 1-26
+src/builders/build_disassembled_files.rs
+  9ecafb799b293ca4 1-268
+src/parsers/mod.rs
+  9ecafb799b293ca4 1-13
+src/transformers/transformers.rs
+  9ecafb799b293ca4 1-75
+src/builders/extract_root_attributes.rs
+  9ecafb799b293ca4 1-63
+LICENSE.md
+  9ecafb799b293ca4 1-21
+src/parsers/parse_to_xml_object.rs
+  9ecafb799b293ca4 1-88
+src/handlers/disassemble.rs
+  9ecafb799b293ca4 1-206
+src/handlers/mod.rs
+  9ecafb799b293ca4 1-5
+Cargo.lock
+  9ecafb799b293ca4 207-212,220-231,333-338,378-383,527-532,571-583,642,718-730,853-861,969-974,992
+src/main.rs
+  9ecafb799b293ca4 1-55
+src/builders/build_xml_string.rs
+  9ecafb799b293ca4 1-203
+src/builders/build_disassembled_file.rs
+  9ecafb799b293ca4 1-92
+src/utils/mod.rs
+  9ecafb799b293ca4 1-3
+src/lib.rs
+  9ecafb799b293ca4 1-17
+src/parsers/strip_whitespace.rs
+  9ecafb799b293ca4 1-71
+src/parsers/parse_element.rs
+  9ecafb799b293ca4 1-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "68014304b079bf5d7b3e872e9edf3721ccaed7e4",
+  "prompts": {
+    "9ecafb799b293ca4": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7b9b1356-ff49-461f-9676-6a57d97f4355",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 2509,
+      "total_deletions": 349,
+      "accepted_lines": 2171,
+      "overriden_lines": 3
+    }
+  }
+}
