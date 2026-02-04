@@ -12,14 +12,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         eprintln!("Usage: xml-disassembler <command> [options]");
-        eprintln!("  disassemble <path>  - Disassemble XML file or directory");
-        eprintln!("  reassemble <path>   - Reassemble disassembled directory");
-        eprintln!("  parse <path>        - Parse and rebuild XML (test)");
+        eprintln!("  disassemble <path>              - Disassemble XML file or directory");
+        eprintln!(
+            "  reassemble <path> [extension]  - Reassemble directory (default extension: xml)"
+        );
+        eprintln!("  parse <path>                    - Parse and rebuild XML (test)");
         return Ok(());
     }
 
     let command = &args[1];
     let path = args.get(2).map(|s| s.as_str()).unwrap_or(".");
+    let extension = args.get(3).map(|s| s.as_str());
 
     match command.as_str() {
         "disassemble" => {
@@ -38,7 +41,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         "reassemble" => {
             let handler = ReassembleXmlFileHandler::new();
-            handler.reassemble(path, Some("xml"), false).await?;
+            handler
+                .reassemble(path, extension.or(Some("xml")), false)
+                .await?;
         }
         "parse" => {
             if let Some(parsed) = parse_xml(path).await {
