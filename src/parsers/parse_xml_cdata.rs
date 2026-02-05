@@ -116,18 +116,35 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
                 let text = e.unescape().unwrap_or_default().to_string();
                 // Preserve all text including whitespace (needed for round-trip of mixed content)
                 if let Some((_, elem)) = stack.last_mut() {
-                    let val = parse_text_value(&text, true);
-                    if elem.contains_key("#cdata") {
-                        elem.insert("#text".to_string(), val);
+                    let val_raw = Value::String(text.clone());
+                    let val_parsed = parse_text_value(&text, true);
+                    if elem.contains_key("#comment") {
+                        // Text after comment goes to #text-tail - preserve raw for round-trip
+                        if let Some(prev) = elem.get_mut("#text-tail") {
+                            if let (Some(a), Some(b)) = (prev.as_str(), val_raw.as_str()) {
+                                *prev = Value::String(format!("{}{}", a, b));
+                            }
+                        } else {
+                            elem.insert("#text-tail".to_string(), val_raw);
+                        }
+                    } else if elem.contains_key("#cdata") {
+                        elem.insert("#text".to_string(), val_raw);
                     } else if elem.contains_key("#text") {
                         if let Some(prev) = elem.get_mut("#text") {
-                            if let (Some(a), Some(b)) = (prev.as_str(), val.as_str()) {
+                            if let (Some(a), Some(b)) = (prev.as_str(), val_parsed.as_str()) {
                                 *prev = Value::String(format!("{}{}", a, b));
                             }
                         }
                     } else {
-                        elem.insert("#text".to_string(), val);
+                        // First #text: use raw to preserve whitespace before comment/CDATA
+                        elem.insert("#text".to_string(), val_raw);
                     }
+                }
+            }
+            Ok(Event::Comment(e)) => {
+                let content = e.unescape().unwrap_or_default().to_string();
+                if let Some((_, elem)) = stack.last_mut() {
+                    elem.insert("#comment".to_string(), Value::String(content));
                 }
             }
             Ok(Event::CData(e)) => {

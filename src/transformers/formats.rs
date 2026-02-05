@@ -67,7 +67,12 @@ fn convert_to_ini_string(v: &Value) -> String {
             out.push_str(&format!("[{}]\n", section));
             if let Some(inner) = value.as_object() {
                 for (k, val) in inner {
-                    if !k.starts_with('@') && k != "#text" && k != "#cdata" {
+                    if !k.starts_with('@')
+                        && k != "#text"
+                        && k != "#cdata"
+                        && k != "#comment"
+                        && k != "#text-tail"
+                    {
                         if let Some(s) = val.as_str() {
                             out.push_str(&format!("{} = {}\n", k, s));
                         }

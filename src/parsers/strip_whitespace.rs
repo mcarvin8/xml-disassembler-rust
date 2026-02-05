@@ -3,7 +3,7 @@
 use serde_json::{Map, Value};
 
 fn is_empty_text_node(key: &str, value: &Value) -> bool {
-    (key == "#text" || key == "#cdata")
+    (key == "#text" || key == "#cdata" || key == "#text-tail")
         && value.as_str().map(|s| s.trim().is_empty()).unwrap_or(false)
 }
 
@@ -22,13 +22,24 @@ fn clean_array(arr: &[Value]) -> Vec<Value> {
 fn clean_object(obj: &Map<String, Value>) -> Map<String, Value> {
     let mut result = Map::new();
     let has_cdata = obj.contains_key("#cdata");
+    let has_comment = obj.contains_key("#comment");
     for (key, value) in obj {
         // Preserve whitespace-only #text when element has #cdata (needed for round-trip)
-        if is_empty_text_node(key, value) && !(key == "#text" && has_cdata) {
+        // Preserve whitespace-only #text and #text-tail when element has #comment
+        if is_empty_text_node(key, value)
+            && !(key == "#text" && has_cdata)
+            && !(key == "#text" && has_comment)
+            && !(key == "#text-tail" && has_comment)
+        {
             continue;
         }
         let cleaned = strip_whitespace_text_nodes(value);
-        if !cleaned.is_null() || key == "#text" || key == "#cdata" {
+        if !cleaned.is_null()
+            || key == "#text"
+            || key == "#cdata"
+            || key == "#comment"
+            || key == "#text-tail"
+        {
             result.insert(key.clone(), cleaned);
         }
     }
