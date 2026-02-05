@@ -1,0 +1,23 @@
+src/parsers/parse_unique_id.rs
+  96c750ccd466d088 44,72,74-75,84,86-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "f7a7db9711de97c7d1492b02447673ec0870c56e",
+  "prompts": {
+    "96c750ccd466d088": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2b38670f-23ad-4563-82a8-8c9f3dcfd42c",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 9,
+      "total_deletions": 46,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    }
+  }
+}
