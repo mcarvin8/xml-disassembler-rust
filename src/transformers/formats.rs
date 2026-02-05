@@ -57,13 +57,17 @@ fn convert_to_ini_string(v: &Value) -> String {
     let mut out = String::new();
     if let Some(obj) = v.as_object() {
         for (section, value) in obj {
-            if section.starts_with('@') || section == "?xml" || section == "#text" {
+            if section.starts_with('@')
+                || section == "?xml"
+                || section == "#text"
+                || section == "#cdata"
+            {
                 continue;
             }
             out.push_str(&format!("[{}]\n", section));
             if let Some(inner) = value.as_object() {
                 for (k, val) in inner {
-                    if !k.starts_with('@') && k != "#text" {
+                    if !k.starts_with('@') && k != "#text" && k != "#cdata" {
                         if let Some(s) = val.as_str() {
                             out.push_str(&format!("{} = {}\n", k, s));
                         }

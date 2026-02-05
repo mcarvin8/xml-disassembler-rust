@@ -357,15 +357,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
-name = "minidom"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe549115a674f5ec64c754d85e37d6f42664bd0ef4ffb62b619489ad99c6cb1a"
-dependencies = [
- "quick-xml 0.17.2",
-]
-
-[[package]]
 name = "mio"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -486,34 +477,12 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.17.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe1e430bdcf30c9fdc25053b9c459bb1a4672af4617b6c783d7d91dc17c6bbb0"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
 version = "0.36.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7649a7b4df05aed9ea7ec6f628c67c9953a43869b8bc50929569b2999d443fe"
 dependencies = [
  "memchr",
  "serde",
-]
-
-[[package]]
-name = "quickxml_to_serde"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "286b05c7a00b356ff6ac5218e10d628e0a3be02e777d067ca7286d353c3c407e"
-dependencies = [
- "minidom",
- "regex",
- "serde",
- "serde_derive",
- "serde_json",
 ]
 
 [[package]]
@@ -982,8 +951,7 @@ dependencies = [
  "ignore",
  "json5",
  "log",
- "quick-xml 0.36.2",
- "quickxml_to_serde",
+ "quick-xml",
  "regex",
  "serde",
  "serde_json",
