@@ -48,14 +48,12 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
             Ok(Event::Start(e)) => {
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
                 let mut attrs = Map::new();
-                for attr in e.attributes() {
-                    if let Ok(a) = attr {
-                        let key = format!("@{}", String::from_utf8_lossy(a.key.as_ref()));
-                        let val = a
-                            .decode_and_unescape_value(reader.decoder())
-                            .unwrap_or_default();
-                        attrs.insert(key, Value::String(val.to_string()));
-                    }
+                for a in e.attributes().flatten() {
+                    let key = format!("@{}", String::from_utf8_lossy(a.key.as_ref()));
+                    let val = a
+                        .decode_and_unescape_value(reader.decoder())
+                        .unwrap_or_default();
+                    attrs.insert(key, Value::String(val.to_string()));
                 }
                 stack.push((name, attrs));
             }
@@ -86,14 +84,12 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
             Ok(Event::Empty(e)) => {
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
                 let mut attrs = Map::new();
-                for attr in e.attributes() {
-                    if let Ok(a) = attr {
-                        let key = format!("@{}", String::from_utf8_lossy(a.key.as_ref()));
-                        let val = a
-                            .decode_and_unescape_value(reader.decoder())
-                            .unwrap_or_default();
-                        attrs.insert(key, Value::String(val.to_string()));
-                    }
+                for a in e.attributes().flatten() {
+                    let key = format!("@{}", String::from_utf8_lossy(a.key.as_ref()));
+                    let val = a
+                        .decode_and_unescape_value(reader.decoder())
+                        .unwrap_or_default();
+                    attrs.insert(key, Value::String(val.to_string()));
                 }
                 let value = if attrs.is_empty() {
                     Value::Object(Map::new())
