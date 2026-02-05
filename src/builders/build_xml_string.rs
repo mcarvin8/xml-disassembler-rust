@@ -120,12 +120,24 @@ fn write_element<W: std::io::Write>(
                     format!("\n{}", indent).as_str(),
                 )))?;
             } else if !cdata_content.is_empty() || !text_content.is_empty() {
+                // Add newline+indent before content when no #text (keeps CDATA on separate line)
+                if text_content.is_empty() {
+                    writer.write_event(Event::Text(BytesText::new(
+                        format!("\n{}", child_indent).as_str(),
+                    )))?;
+                }
                 // Output #text first (e.g. whitespace before CDATA), then #cdata
                 if !text_content.is_empty() {
                     writer.write_event(Event::Text(BytesText::new(text_content.as_str())))?;
                 }
                 if !cdata_content.is_empty() {
                     writer.write_event(Event::CData(BytesCData::new(cdata_content.as_str())))?;
+                }
+                // Add newline+indent before closing tag only for CDATA (keeps compact for text-only)
+                if !cdata_content.is_empty() {
+                    writer.write_event(Event::Text(BytesText::new(
+                        format!("\n{}", indent).as_str(),
+                    )))?;
                 }
             }
 
@@ -152,7 +164,8 @@ fn write_element<W: std::io::Write>(
 fn build_xml_from_object(
     element: &Map<String, Value>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let mut writer = Writer::new_with_indent(Vec::new(), b' ', 4);
+    // Use Writer::new (no indent) so leaf elements stay compact and match fixture format
+    let mut writer = Writer::new(Vec::new());
 
     let (declaration, root_key, root_value) = if let Some(decl) = element.get("?xml") {
         let root_key = element
@@ -188,6 +201,7 @@ fn build_xml_from_object(
                 let encoding = obj.get("@encoding").and_then(|v| v.as_str());
                 let standalone = obj.get("@standalone").and_then(|v| v.as_str());
                 writer.write_event(Event::Decl(BytesDecl::new(version, encoding, standalone)))?;
+                writer.write_event(Event::Text(BytesText::new("\n")))?;
             }
         }
     }

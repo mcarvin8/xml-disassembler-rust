@@ -116,33 +116,8 @@ async fn cdata_preserved_round_trip() {
 
     let reassembled_content = std::fs::read_to_string(&reassembled_path).expect("read reassembled");
 
-    // CDATA sections must be preserved (not escaped to &quot; etc.)
-    assert!(
-        reassembled_content.contains("<![CDATA["),
-        "Reassembled XML must contain CDATA sections"
-    );
-    assert!(
-        !reassembled_content.contains("&quot;"),
-        "CDATA content must not be escaped (no &quot; in JSON)"
-    );
-    // Verify all CDATA content matches (whitespace may differ due to formatting)
-    let extract_all_cdata = |s: &str| {
-        let mut result = Vec::new();
-        let mut rest = s;
-        while let Some(start) = rest.find("<![CDATA[") {
-            let cdata_start = start + 9;
-            if let Some(end) = rest[cdata_start..].find("]]>") {
-                result.push(rest[cdata_start..cdata_start + end].to_string());
-                rest = &rest[cdata_start + end + 3..];
-            } else {
-                break;
-            }
-        }
-        result
-    };
     assert_eq!(
-        extract_all_cdata(&reassembled_content),
-        extract_all_cdata(&original_content),
-        "CDATA content must match original"
+        original_content, reassembled_content,
+        "Reassembled XML must match original file contents (CDATA round-trip)"
     );
 }
