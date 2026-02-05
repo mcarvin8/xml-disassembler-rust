@@ -1,0 +1,23 @@
+tests/disassemble_reassemble.rs
+  96c750ccd466d088 184-246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "e281ea9defb933e0d1e4117ba7e9b8d5c1ef3e8b",
+  "prompts": {
+    "96c750ccd466d088": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2b38670f-23ad-4563-82a8-8c9f3dcfd42c",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 63,
+      "total_deletions": 0,
+      "accepted_lines": 63,
+      "overriden_lines": 0
+    }
+  }
+}
