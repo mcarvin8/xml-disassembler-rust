@@ -19,12 +19,25 @@ fn is_object(value: &Value) -> bool {
     value.is_object() && !value.is_array()
 }
 
+/// Extract string from a value - handles both direct strings and objects with #text (XML leaf elements).
+fn value_as_string(value: &Value) -> Option<String> {
+    if let Some(s) = value.as_str() {
+        return Some(s.to_string());
+    }
+    if let Some(obj) = value.as_object() {
+        if let Some(text) = obj.get("#text").and_then(|v| v.as_str()) {
+            return Some(text.to_string());
+        }
+    }
+    None
+}
+
 fn find_direct_field_match(element: &XmlElement, field_names: &[&str]) -> Option<String> {
     let obj = element.as_object()?;
     for name in field_names {
         if let Some(value) = obj.get(*name) {
-            if let Some(s) = value.as_str() {
-                return Some(s.to_string());
+            if let Some(s) = value_as_string(value) {
+                return Some(s);
             }
         }
     }
@@ -88,5 +101,20 @@ mod tests {
             }
         });
         assert_eq!(parse_unique_id_element(&el, Some("name")), "NestedName");
+    }
+
+    #[test]
+    fn finds_name_from_text_object() {
+        // XML parser stores leaf elements as { "#text": "value" }
+        let el = json!({
+            "name": { "#text": "Get_Info" },
+            "label": { "#text": "Get Info" },
+            "actionName": { "#text": "GetFirstFromCollection" }
+        });
+        assert_eq!(parse_unique_id_element(&el, Some("name")), "Get_Info");
+        assert_eq!(
+            parse_unique_id_element(&el, Some("actionName")),
+            "GetFirstFromCollection"
+        );
     }
 }
