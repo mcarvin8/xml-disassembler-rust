@@ -1,0 +1,23 @@
+src/parsers/parse_xml_cdata.rs
+  96c750ccd466d088 51,87,92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "3960a88ae7431131e95146c1d9bfd38bcd2ce0e2",
+  "prompts": {
+    "96c750ccd466d088": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2b38670f-23ad-4563-82a8-8c9f3dcfd42c",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 12,
+      "total_deletions": 16,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}
