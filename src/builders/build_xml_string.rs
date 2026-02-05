@@ -33,12 +33,20 @@ fn write_element<W: std::io::Write>(
             let attr_name = |k: &str| k.trim_start_matches('@').to_string();
 
             let mut text_content = String::new();
+            let mut comment_content = String::new();
+            let mut text_tail_content = String::new();
             let mut cdata_content = String::new();
             let child_elements: Vec<(&String, &Value)> = children
                 .iter()
                 .filter_map(|(k, v)| {
                     if *k == "#text" {
                         text_content = value_to_string(v);
+                        None
+                    } else if *k == "#comment" {
+                        comment_content = value_to_string(v);
+                        None
+                    } else if *k == "#text-tail" {
+                        text_tail_content = value_to_string(v);
                         None
                     } else if *k == "#cdata" {
                         cdata_content = value_to_string(v);
@@ -119,16 +127,26 @@ fn write_element<W: std::io::Write>(
                 writer.write_event(Event::Text(BytesText::new(
                     format!("\n{}", indent).as_str(),
                 )))?;
-            } else if !cdata_content.is_empty() || !text_content.is_empty() {
-                // Add newline+indent before content when no #text (keeps CDATA on separate line)
-                if text_content.is_empty() {
+            } else if !cdata_content.is_empty()
+                || !text_content.is_empty()
+                || !comment_content.is_empty()
+                || !text_tail_content.is_empty()
+            {
+                // Add newline+indent before content when no leading text (keeps CDATA/comment on separate line)
+                if text_content.is_empty() && comment_content.is_empty() {
                     writer.write_event(Event::Text(BytesText::new(
                         format!("\n{}", child_indent).as_str(),
                     )))?;
                 }
-                // Output #text first (e.g. whitespace before CDATA), then #cdata
+                // Output in order: #text, #comment, #text-tail, #cdata
                 if !text_content.is_empty() {
                     writer.write_event(Event::Text(BytesText::new(text_content.as_str())))?;
+                }
+                if !comment_content.is_empty() {
+                    writer.write_event(Event::Comment(BytesText::new(comment_content.as_str())))?;
+                }
+                if !text_tail_content.is_empty() {
+                    writer.write_event(Event::Text(BytesText::new(text_tail_content.as_str())))?;
                 }
                 if !cdata_content.is_empty() {
                     writer.write_event(Event::CData(BytesCData::new(cdata_content.as_str())))?;

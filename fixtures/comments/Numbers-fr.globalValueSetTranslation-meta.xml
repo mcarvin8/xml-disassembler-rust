@@ -5,13 +5,13 @@
         <translation>Trois</translation>
     </valueTranslation>
     <valueTranslation>
-        <masterLabel>Five</masterLabel>
-        <translation>cinq</translation>
-    </valueTranslation>
-    <valueTranslation>
         <masterLabel>Four</masterLabel>
         <translation>
             <!-- Four -->
         </translation>
+    </valueTranslation>
+    <valueTranslation>
+        <masterLabel>Five</masterLabel>
+        <translation>cinq</translation>
     </valueTranslation>
 </GlobalValueSetTranslation>
