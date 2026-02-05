@@ -122,7 +122,7 @@ cargo test
 
 ## License
 
-Licensed under ([MIT](LICENSE.md)).
+Licensed under [MIT](LICENSE.md).
 
 ## Contribution
 
