@@ -1,19 +1,11 @@
 //! Parse XML file from path into XmlElement structure.
 
-use quickxml_to_serde::{Config, NullValue};
 use serde_json::Value;
 use tokio::fs;
 
+use crate::parsers::parse_xml_cdata;
 use crate::parsers::strip_whitespace_text_nodes;
 use crate::types::XmlElement;
-
-/// XML parser config matching fast-xml-parser behavior:
-/// - @ prefix for attributes
-/// - #text for text nodes
-/// - leading_zero_as_string to preserve string values
-fn xml_parser_config() -> Config {
-    Config::new_with_custom_values(true, "@", "#text", NullValue::EmptyObject)
-}
 
 /// Parses an XML file from a path.
 pub async fn parse_xml(file_path: &str) -> Option<XmlElement> {
@@ -32,9 +24,9 @@ pub async fn parse_xml(file_path: &str) -> Option<XmlElement> {
 }
 
 /// Parses XML from a string. The file_path is used for error logging only.
+/// Uses custom parser that preserves CDATA sections (output as #cdata key).
 pub fn parse_xml_from_str(content: &str, file_path: &str) -> Option<XmlElement> {
-    let config = xml_parser_config();
-    let parsed: Value = match quickxml_to_serde::xml_string_to_json(content.to_string(), &config) {
+    let parsed: Value = match parse_xml_cdata::parse_xml_with_cdata(content) {
         Ok(v) => v,
         Err(e) => {
             log::error!(

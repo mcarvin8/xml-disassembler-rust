@@ -1,6 +1,6 @@
 //! Build XML string from XmlElement structure.
 
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::events::{BytesCData, BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use serde_json::{Map, Value};
 
@@ -33,11 +33,15 @@ fn write_element<W: std::io::Write>(
             let attr_name = |k: &str| k.trim_start_matches('@').to_string();
 
             let mut text_content = String::new();
+            let mut cdata_content = String::new();
             let child_elements: Vec<(&String, &Value)> = children
                 .iter()
                 .filter_map(|(k, v)| {
                     if *k == "#text" {
                         text_content = value_to_string(v);
+                        None
+                    } else if *k == "#cdata" {
+                        cdata_content = value_to_string(v);
                         None
                     } else {
                         Some((*k, *v))
@@ -115,9 +119,14 @@ fn write_element<W: std::io::Write>(
                 writer.write_event(Event::Text(BytesText::new(
                     format!("\n{}", indent).as_str(),
                 )))?;
-            } else if !text_content.is_empty() {
-                // BytesText::new() expects unescaped content; the writer escapes when writing
-                writer.write_event(Event::Text(BytesText::new(text_content.as_str())))?;
+            } else if !cdata_content.is_empty() || !text_content.is_empty() {
+                // Output #text first (e.g. whitespace before CDATA), then #cdata
+                if !text_content.is_empty() {
+                    writer.write_event(Event::Text(BytesText::new(text_content.as_str())))?;
+                }
+                if !cdata_content.is_empty() {
+                    writer.write_event(Event::CData(BytesCData::new(cdata_content.as_str())))?;
+                }
             }
 
             writer.write_event(Event::End(BytesEnd::new(name)))?;

@@ -10,7 +10,6 @@ license = "MIT"
 
 [dependencies]
 quick-xml = { version = "0.36", features = ["serialize"] }
-quickxml_to_serde = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 serde_yaml = "0.9"

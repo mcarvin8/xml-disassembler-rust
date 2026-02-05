@@ -2,6 +2,7 @@ mod parse_element;
 mod parse_to_xml_object;
 mod parse_unique_id;
 mod parse_xml;
+mod parse_xml_cdata;
 mod strip_whitespace;
 
 pub use parse_element::parse_element_unified;

@@ -3,7 +3,8 @@
 use serde_json::{Map, Value};
 
 fn is_empty_text_node(key: &str, value: &Value) -> bool {
-    key == "#text" && value.as_str().map(|s| s.trim().is_empty()).unwrap_or(false)
+    (key == "#text" || key == "#cdata")
+        && value.as_str().map(|s| s.trim().is_empty()).unwrap_or(false)
 }
 
 fn clean_array(arr: &[Value]) -> Vec<Value> {
@@ -20,12 +21,14 @@ fn clean_array(arr: &[Value]) -> Vec<Value> {
 
 fn clean_object(obj: &Map<String, Value>) -> Map<String, Value> {
     let mut result = Map::new();
+    let has_cdata = obj.contains_key("#cdata");
     for (key, value) in obj {
-        if is_empty_text_node(key, value) {
+        // Preserve whitespace-only #text when element has #cdata (needed for round-trip)
+        if is_empty_text_node(key, value) && !(key == "#text" && has_cdata) {
             continue;
         }
         let cleaned = strip_whitespace_text_nodes(value);
-        if !cleaned.is_null() || key == "#text" {
+        if !cleaned.is_null() || key == "#text" || key == "#cdata" {
             result.insert(key.clone(), cleaned);
         }
     }
