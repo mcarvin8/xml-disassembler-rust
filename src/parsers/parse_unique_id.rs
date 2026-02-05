@@ -31,17 +31,44 @@ fn find_direct_field_match(element: &XmlElement, field_names: &[&str]) -> Option
     None
 }
 
+/// Returns true if the string looks like a hash fallback (8 hex chars) rather than a real ID.
+fn looks_like_hash(s: &str) -> bool {
+    s.len() == 8 && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 fn find_nested_field_match(element: &XmlElement, unique_id_elements: &str) -> Option<String> {
     let obj = element.as_object()?;
+    let mut hash_fallback: Option<String> = None;
     for (_, child) in obj {
         if is_object(child) {
             let result = parse_unique_id_element(child, Some(unique_id_elements));
             if !result.is_empty() {
-                return Some(result);
+                if looks_like_hash(&result) {
+                    if hash_fallback.is_none() {
+                        hash_fallback = Some(result);
+                    }
+                } else {
+                    return Some(result);
+                }
+            }
+        } else if let Some(arr) = child.as_array() {
+            for item in arr {
+                if is_object(item) {
+                    let result = parse_unique_id_element(item, Some(unique_id_elements));
+                    if !result.is_empty() {
+                        if looks_like_hash(&result) {
+                            if hash_fallback.is_none() {
+                                hash_fallback = Some(result);
+                            }
+                        } else {
+                            return Some(result);
+                        }
+                    }
+                }
             }
         }
     }
-    None
+    hash_fallback
 }
 
 /// Get a unique ID for an element, using configured fields or a hash.
@@ -53,5 +80,50 @@ pub fn parse_unique_id_element(element: &XmlElement, unique_id_elements: Option<
             .unwrap_or_else(|| create_short_hash(element))
     } else {
         create_short_hash(element)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn finds_direct_field() {
+        let el = json!({ "name": "Get_Info", "label": "Get Info" });
+        assert_eq!(parse_unique_id_element(&el, Some("name")), "Get_Info");
+    }
+
+    #[test]
+    fn finds_deeply_nested_field() {
+        let el = json!({
+            "connector": { "targetReference": "X" },
+            "value": { "elementReference": "accts.accounts" }
+        });
+        assert_eq!(
+            parse_unique_id_element(&el, Some("elementReference")),
+            "accts.accounts"
+        );
+    }
+
+    #[test]
+    fn prefers_real_id_over_hash_from_first_child() {
+        let el = json!({
+            "connector": { "targetReference": "Update_If_Existing" },
+            "value": { "elementReference": "accts.accounts" }
+        });
+        let result = parse_unique_id_element(&el, Some("elementReference"));
+        assert_eq!(result, "accts.accounts");
+    }
+
+    #[test]
+    fn finds_id_in_array_element() {
+        let el = json!({
+            "items": [
+                { "other": "x" },
+                { "name": "NestedName" }
+            ]
+        });
+        assert_eq!(parse_unique_id_element(&el, Some("name")), "NestedName");
     }
 }
