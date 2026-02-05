@@ -29,7 +29,7 @@ Disassemble large XML files into smaller files and reassemble the original XML. 
 
 ```bash
 git clone https://github.com/mcarvin8/xml-disassembler-rust.git
-cd xml-disassembler
+cd xml-disassembler-rust
 cargo build --release
 ```
 
@@ -122,9 +122,7 @@ cargo test
 
 ## License
 
-Licensed under
-
-- MIT license ([LICENSE](LICENSE.md))
+Licensed under ([MIT](LICENSE.md)).
 
 ## Contribution
 
