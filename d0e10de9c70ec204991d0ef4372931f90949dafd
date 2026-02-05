@@ -1,0 +1,39 @@
+src/builders/build_xml_string.rs
+  96c750ccd466d088 3,36,43-44,122-125,127-129
+src/transformers/formats.rs
+  96c750ccd466d088 63,70
+Cargo.lock
+  96c750ccd466d088 954
+src/parsers/parse_xml_cdata.rs
+  96c750ccd466d088 1-74,76-128,130-131,134,136-164
+src/parsers/parse_xml.rs
+  96c750ccd466d088 6,27,29
+test_parse.rs
+  96c750ccd466d088 3
+tests/disassemble_reassemble.rs
+  96c750ccd466d088 64-148
+src/parsers/strip_whitespace.rs
+  96c750ccd466d088 6,24,26-27,31
+src/parsers/mod.rs
+  96c750ccd466d088 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "d0e10de9c70ec204991d0ef4372931f90949dafd",
+  "prompts": {
+    "96c750ccd466d088": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2b38670f-23ad-4563-82a8-8c9f3dcfd42c",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 595,
+      "total_deletions": 132,
+      "accepted_lines": 514,
+      "overriden_lines": 2
+    }
+  }
+}
