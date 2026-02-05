@@ -1,0 +1,47 @@
+src/parsers/parse_xml_cdata.rs
+  96c750ccd466d088 119-131,134,139-140,144-147
+src/parsers/strip_whitespace.rs
+  96c750ccd466d088 6,25,28,30-32,37
+  9ecafb799b293ca4 38-42
+fixtures/comments/Numbers-fr.globalValueSetTranslation-meta.xml
+  96c750ccd466d088 13-16
+tests/disassemble_reassemble.rs
+  96c750ccd466d088 124-183
+src/builders/build_xml_string.rs
+  96c750ccd466d088 36-37,45-49,132-133,135-136,141,145-150
+src/transformers/formats.rs
+  96c750ccd466d088 70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "8453c1c7c1d20a9631c3c3487f0ccdc234976d59",
+  "prompts": {
+    "96c750ccd466d088": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2b38670f-23ad-4563-82a8-8c9f3dcfd42c",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 129,
+      "total_deletions": 24,
+      "accepted_lines": 117,
+      "overriden_lines": 0
+    },
+    "9ecafb799b293ca4": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7b9b1356-ff49-461f-9676-6a57d97f4355",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 27,
+      "total_deletions": 2,
+      "accepted_lines": 27,
+      "overriden_lines": 0
+    }
+  }
+}
