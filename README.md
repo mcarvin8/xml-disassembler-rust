@@ -8,10 +8,47 @@ Disassemble large XML files into smaller files and reassemble the original XML. 
 
 > **Note:** This is a Rust implementation of the original [TypeScript xml-disassembler](https://github.com/mcarvin8/xml-disassembler).
 
+---
+
+## Table of contents
+
+- [Quick start](#quick-start)
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [As a library](#as-a-library)
+- [Disassembly strategies](#disassembly-strategies)
+- [Ignore file](#ignore-file)
+- [Logging](#logging)
+- [XML parser](#xml-parser)
+- [Testing](#testing)
+- [License](#license)
+- [Contribution](#contribution)
+
+---
+
+## Quick start
+
+```bash
+# Disassemble: one XML → many small files
+xml-disassembler disassemble path/to/YourFile.permissionset-meta.xml \
+  --unique-id-elements "application,apexClass,name,flow,object,recordType,tab,field" \
+  --format json \
+  --strategy unique-id
+
+# Reassemble: many small files → one XML
+xml-disassembler reassemble path/to/YourFile permissionset-meta.xml
+```
+
+---
+
 ## Features
 
 - **Disassemble** – Split a single XML file (or directory of XML files) into many smaller files, grouped by structure.
 - **Reassemble** – Merge disassembled files back into the original XML. Uses the XML declaration and root attributes from the disassembled files, with sensible defaults when missing.
+- **Multiple formats** – Output (and reassemble from) XML, INI, JSON, JSON5, TOML, or YAML.
+- **Strategies** – `unique-id` (one file per nested element) or `grouped-by-tag` (one file per tag).
+- **Ignore rules** – Exclude paths via a `.xmldisassemblerignore` file (same style as `.gitignore`).
 - **Round-trip safe** – Disassembled output includes the original XML declaration and `xmlns` on the root; reassembly preserves order and content so the result matches the source.
 - **Library API** – Use `DisassembleXmlFileHandler`, `ReassembleXmlFileHandler`, `parse_xml`, and `build_xml_string` from your own Rust code.
 
@@ -108,6 +145,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 ```
+
+## Disassembly strategies
+
+### unique-id (default)
+
+Each nested element is written to its own file, named by a unique identifier (or an 8-character SHA-256 hash if no UID is available). Leaf content stays in a file named after the original XML.
+
+Best for fine-grained diffs and version control.
+
+- **UID-based layout** – When you provide `--unique-id-elements` (e.g. `name,id,apexClass`), nested elements are named by the first matching field value. For Salesforce flows, a typical list might be: `apexClass,name,object,field,layout,actionName,targetReference,assignToReference,choiceText,promptText`. Using unique ID elements also ensures predictable sorting in the reassembled output.
+- **Hash-based layout** – When no unique ID is found, elements are named with an 8-character hash of their content (e.g. `419e0199.botMlDomain-meta.xml`).
+
+### grouped-by-tag
+
+All nested elements with the same tag go into one file per tag. Leaf content stays in the base file named after the original XML.
+
+Best for fewer files and quick inspection.
+
+```bash
+xml-disassembler disassemble ./my.xml --strategy grouped-by-tag --format yaml
+```
+
+Reassembly preserves element content and structure; element order may differ (especially with TOML).
+
+## Ignore file
+
+Exclude files or directories from disassembly using an ignore file (default: `.xmldisassemblerignore`). The Rust implementation uses the [ignore](https://crates.io/crates/ignore) crate with `.gitignore`-style syntax.
+
+Place the file in the directory you run disassembly from (or specify a path with `--ignore-path`).
+
+Example `.xmldisassemblerignore`:
+
+```
+# Skip these paths
+**/secret.xml
+**/generated/
+```
+
+## Logging
+
+Logging uses the [log](https://crates.io/crates/log) crate with [env_logger](https://crates.io/crates/env_logger). Control verbosity via the `RUST_LOG` environment variable.
+
+```bash
+# Default: only errors
+xml-disassembler disassemble ./my.xml
+
+# Verbose logging (debug level)
+RUST_LOG=debug xml-disassembler disassemble ./my.xml
+
+# Log only xml_disassembler crate
+RUST_LOG=xml_disassembler=debug xml-disassembler disassemble ./my.xml
+```
+
+When using the library, call `env_logger::init()` early in your binary (as in the CLI) and set `RUST_LOG` as needed.
+
+## XML parser
+
+Parsing is done with [quick-xml](https://github.com/tafia/quick-xml), with support for:
+
+- **CDATA** – Preserved and output as `#cdata` in the parsed structure.
+- **Comments** – Preserved in the XML output.
+- **Attributes** – Stored with `@` prefix (e.g. `@version`, `@encoding`).
 
 ## Testing
 
