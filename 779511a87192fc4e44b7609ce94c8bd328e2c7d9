@@ -1,0 +1,25 @@
+.github/workflows/release-plz.yml
+  4ed795a1c1e93bac 1-55
+.github/workflows/cd.yml
+  4ed795a1c1e93bac 4-5,9-10,12,18,22,24,26,30,36-38,40-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "779511a87192fc4e44b7609ce94c8bd328e2c7d9",
+  "prompts": {
+    "4ed795a1c1e93bac": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "34b086c7-abcc-4897-9b32-af5e7ffda1fc",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 89,
+      "total_deletions": 96,
+      "accepted_lines": 77,
+      "overriden_lines": 0
+    }
+  }
+}
