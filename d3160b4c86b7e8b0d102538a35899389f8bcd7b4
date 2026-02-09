@@ -1,0 +1,25 @@
+src/main.rs
+  8b9008c6a85f12b0 126
+README.md
+  8b9008c6a85f12b0 170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.42",
+  "base_commit_sha": "d3160b4c86b7e8b0d102538a35899389f8bcd7b4",
+  "prompts": {
+    "8b9008c6a85f12b0": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "28212711-73ea-4de9-9f28-e02ed73030e4",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 206,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}
