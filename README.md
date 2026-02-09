@@ -167,7 +167,7 @@ Best for fewer files and quick inspection.
 xml-disassembler disassemble ./my.xml --strategy grouped-by-tag --format yaml
 ```
 
-Reassembly preserves element content and structure; element order may differ (especially with some formats).
+Reassembly preserves element content and structure.
 
 ## Ignore file
 
