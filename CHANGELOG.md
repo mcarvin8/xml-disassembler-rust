@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.1.6...v0.2.0) - 2026-02-09
+
+### Fixed
+
+- remove toml and ini as disassemble formats ([#13](https://github.com/mcarvin8/xml-disassembler-rust/pull/13))
+
 ## [0.1.6](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.1.5...v0.1.6) - 2026-02-06
 
 ### Other
