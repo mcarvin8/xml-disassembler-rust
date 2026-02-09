@@ -123,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         eprintln!("    --prepurge                     - Remove existing disassembly output before running (default: false)");
         eprintln!("    --unique-id-elements <list>    - Comma-separated element names for nested filenames");
         eprintln!("    --ignore-path <path>           - Path to ignore file (default: .xmldisassemblerignore)");
-        eprintln!("    --format <fmt>                 - Output format: xml, ini, json, json5, toml, yaml (default: xml)");
+        eprintln!("    --format <fmt>                 - Output format: xml, json, json5, yaml (default: xml)");
         eprintln!(
             "    --strategy <name>              - unique-id or grouped-by-tag (default: unique-id)"
         );

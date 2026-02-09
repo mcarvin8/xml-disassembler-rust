@@ -46,7 +46,7 @@ xml-disassembler reassemble path/to/YourFile permissionset-meta.xml
 
 - **Disassemble** – Split a single XML file (or directory of XML files) into many smaller files, grouped by structure.
 - **Reassemble** – Merge disassembled files back into the original XML. Uses the XML declaration and root attributes from the disassembled files, with sensible defaults when missing.
-- **Multiple formats** – Output (and reassemble from) XML, INI, JSON, JSON5, TOML, or YAML.
+- **Multiple formats** – Output (and reassemble from) XML, JSON, JSON5, or YAML.
 - **Strategies** – `unique-id` (one file per nested element) or `grouped-by-tag` (one file per tag).
 - **Ignore rules** – Exclude paths via a `.xmldisassemblerignore` file (same style as `.gitignore`).
 - **Round-trip safe** – Disassembled output includes the original XML declaration and `xmlns` on the root; reassembly preserves order and content so the result matches the source.
@@ -95,7 +95,7 @@ xml-disassembler parse <path>
 | `--prepurge` | Remove existing disassembly output before running | false |
 | `--postpurge` | Delete original file/directory after disassembling | false |
 | `--ignore-path <path>` | Path to the ignore file | .xmldisassemblerignore |
-| `--format <fmt>` | Output format: xml, ini, json, json5, toml, yaml | xml |
+| `--format <fmt>` | Output format: xml, json, json5, yaml | xml |
 | `--strategy <name>` | unique-id or grouped-by-tag | unique-id |
 
 #### Reassemble options
@@ -167,7 +167,7 @@ Best for fewer files and quick inspection.
 xml-disassembler disassemble ./my.xml --strategy grouped-by-tag --format yaml
 ```
 
-Reassembly preserves element content and structure; element order may differ (especially with TOML).
+Reassembly preserves element content and structure.
 
 ## Ignore file
 

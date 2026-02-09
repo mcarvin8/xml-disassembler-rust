@@ -131,8 +131,6 @@ impl ReassembleXmlFileHandler {
             || lower.ends_with(".json5")
             || lower.ends_with(".yaml")
             || lower.ends_with(".yml")
-            || lower.ends_with(".toml")
-            || lower.ends_with(".ini")
     }
 
     async fn validate_directory(
