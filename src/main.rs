@@ -2,7 +2,7 @@
 
 use std::env;
 use xml_disassembler::{
-    build_xml_string, parse_xml, DisassembleXmlFileHandler, MultiLevelRule,
+    build_xml_string, parse_xml, DecomposeRule, DisassembleXmlFileHandler, MultiLevelRule,
     ReassembleXmlFileHandler,
 };
 
@@ -16,6 +16,44 @@ struct DisassembleOpts<'a> {
     format: &'a str,
     strategy: Option<&'a str>,
     multi_level: Option<String>,
+    split_tags: Option<String>,
+}
+
+/// Parse --split-tags spec for grouped-by-tag. Comma-separated rules; each rule:
+/// tag:mode:field (path_segment defaults to tag) or tag:path:mode:field.
+/// mode = "split" (one file per item, filename from field) or "group" (group by field).
+/// e.g. "objectPermissions:split:object,fieldPermissions:group:object"
+fn parse_decompose_spec(spec: &str) -> Vec<DecomposeRule> {
+    let mut rules = Vec::new();
+    for part in spec.split(',') {
+        let part = part.trim();
+        let segments: Vec<&str> = part.splitn(4, ':').collect();
+        if segments.len() >= 3 {
+            let tag = segments[0].to_string();
+            let (path_segment, mode, field) = if segments.len() == 3 {
+                (
+                    tag.clone(),
+                    segments[1].to_string(),
+                    segments[2].to_string(),
+                )
+            } else {
+                (
+                    segments[1].to_string(),
+                    segments[2].to_string(),
+                    segments[3].to_string(),
+                )
+            };
+            if !tag.is_empty() && !mode.is_empty() && !field.is_empty() {
+                rules.push(DecomposeRule {
+                    tag,
+                    path_segment,
+                    mode,
+                    field,
+                });
+            }
+        }
+    }
+    rules
 }
 
 /// Parse --multi-level spec: "file_pattern:root_to_strip:unique_id_elements"
@@ -51,6 +89,7 @@ fn parse_disassemble_args(args: &[String]) -> DisassembleOpts<'_> {
     let mut format = "xml";
     let mut strategy = None;
     let mut multi_level = None;
+    let mut split_tags = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -106,6 +145,15 @@ fn parse_disassemble_args(args: &[String]) -> DisassembleOpts<'_> {
                 multi_level = Some(args[i].clone());
                 i += 1;
             }
+        } else if arg.starts_with("--split-tags=") {
+            split_tags = Some(arg.trim_start_matches("--split-tags=").to_string());
+            i += 1;
+        } else if arg == "--split-tags" || arg == "-p" {
+            i += 1;
+            if i < args.len() {
+                split_tags = Some(args[i].clone());
+                i += 1;
+            }
         } else if arg.starts_with("--") {
             i += 1;
         } else if path.is_none() {
@@ -125,6 +173,7 @@ fn parse_disassemble_args(args: &[String]) -> DisassembleOpts<'_> {
         format,
         strategy,
         multi_level,
+        split_tags,
     }
 }
 
@@ -163,6 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             "    --strategy <name>              - unique-id or grouped-by-tag (default: unique-id)"
         );
         eprintln!("    --multi-level <spec>          - Further disassemble matching files: file_pattern:root_to_strip:unique_id_elements");
+        eprintln!("    -p, --split-tags <spec>       - With grouped-by-tag: split/group nested tags (e.g. objectPermissions:split:object,fieldPermissions:group:field)");
         eprintln!("  reassemble <path> [extension] [--postpurge]  - Reassemble directory (default extension: xml)");
         eprintln!("  parse <path>                    - Parse and rebuild XML (test)");
         return Ok(());
@@ -175,6 +225,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         "disassemble" => {
             let opts = parse_disassemble_args(&args[2..]);
             let path = opts.path.unwrap_or(".");
+            let strategy = opts.strategy.unwrap_or("unique-id");
             let multi_level_rule = opts
                 .multi_level
                 .as_ref()
@@ -184,17 +235,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     "Invalid --multi-level spec; use file_pattern:root_to_strip:unique_id_elements"
                 );
             }
+            let decompose_rules: Vec<DecomposeRule> = if strategy == "grouped-by-tag" {
+                opts.split_tags
+                    .as_ref()
+                    .map(|s| parse_decompose_spec(s))
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let decompose_rules_ref = if decompose_rules.is_empty() {
+                None
+            } else {
+                Some(decompose_rules.as_slice())
+            };
             let mut handler = DisassembleXmlFileHandler::new();
             handler
                 .disassemble(
                     path,
                     opts.unique_id_elements,
-                    opts.strategy.or(Some("unique-id")),
+                    Some(strategy),
                     opts.pre_purge,
                     opts.post_purge,
                     opts.ignore_path,
                     opts.format,
                     multi_level_rule.as_ref(),
+                    decompose_rules_ref,
                 )
                 .await?;
         }
