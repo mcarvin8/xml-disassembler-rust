@@ -2,7 +2,7 @@
 //! the reassembled XML matches the original file contents (same as original TypeScript tests).
 
 use std::path::Path;
-use xml_disassembler::{DisassembleXmlFileHandler, ReassembleXmlFileHandler};
+use xml_disassembler::{DecomposeRule, DisassembleXmlFileHandler, ReassembleXmlFileHandler};
 
 #[tokio::test]
 async fn disassemble_then_reassemble_matches_original_xml() {
@@ -36,6 +36,7 @@ async fn disassemble_then_reassemble_matches_original_xml() {
             false,
             ".xmldisassemblerignore",
             "xml",
+            None,
             None,
         )
         .await
@@ -93,6 +94,7 @@ async fn cdata_preserved_round_trip() {
             false,
             ".xmldisassemblerignore",
             "xml",
+            None,
             None,
         )
         .await
@@ -154,6 +156,7 @@ async fn comments_preserved_round_trip() {
             false,
             ".xmldisassemblerignore",
             "xml",
+            None,
             None,
         )
         .await
@@ -218,6 +221,7 @@ async fn deeply_nested_unique_id_elements_round_trip() {
             false,
             ".xmldisassemblerignore",
             "xml",
+            None,
             None,
         )
         .await
@@ -291,6 +295,7 @@ async fn multi_level_disassemble_then_reassemble_matches_original() {
             ".xmldisassemblerignore",
             "xml",
             Some(&rule),
+            None,
         )
         .await
         .expect("disassemble");
@@ -314,5 +319,80 @@ async fn multi_level_disassemble_then_reassemble_matches_original() {
     assert_eq!(
         original_content, reassembled_content,
         "Reassembled XML must match original (multi-level round-trip)"
+    );
+}
+
+/// Grouped-by-tag with --split-tags: objectPermissions split by object, fieldPermissions grouped by object (from field).
+/// Reassemble and compare to original fixture.
+#[tokio::test]
+async fn split_tags_disassemble_then_reassemble_matches_original() {
+    let _ = env_logger::try_init();
+
+    let fixture = "fixtures/split-tags/HR_Admin.permissionset-meta.xml";
+    assert!(
+        Path::new(fixture).exists(),
+        "Fixture {} must exist (run from project root)",
+        fixture
+    );
+
+    let original_content = std::fs::read_to_string(fixture).expect("read original fixture");
+
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let disassembled_dir = base.join("HR_Admin");
+
+    let source_in_temp = base.join("HR_Admin.permissionset-meta.xml");
+    std::fs::copy(fixture, &source_in_temp).expect("copy fixture to temp");
+
+    let split_tags_rules = vec![
+        DecomposeRule {
+            tag: "objectPermissions".to_string(),
+            path_segment: "objectPermissions".to_string(),
+            mode: "split".to_string(),
+            field: "object".to_string(),
+        },
+        DecomposeRule {
+            tag: "fieldPermissions".to_string(),
+            path_segment: "fieldPermissions".to_string(),
+            mode: "group".to_string(),
+            field: "field".to_string(),
+        },
+    ];
+
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            source_in_temp.to_str().unwrap(),
+            None,
+            Some("grouped-by-tag"),
+            false,
+            false,
+            ".xmldisassemblerignore",
+            "xml",
+            None,
+            Some(&split_tags_rules),
+        )
+        .await
+        .expect("disassemble");
+
+    assert!(
+        disassembled_dir.exists(),
+        "Disassembled directory should exist"
+    );
+
+    let reassemble_handler = ReassembleXmlFileHandler::new();
+    reassemble_handler
+        .reassemble(disassembled_dir.to_str().unwrap(), Some("xml"), false)
+        .await
+        .expect("reassemble");
+
+    let reassembled_path = base.join("HR_Admin.xml");
+    assert!(reassembled_path.exists(), "Reassembled file should exist");
+
+    let reassembled_content = std::fs::read_to_string(&reassembled_path).expect("read reassembled");
+
+    assert_eq!(
+        original_content, reassembled_content,
+        "Reassembled XML must match original (split-tags round-trip)"
     );
 }

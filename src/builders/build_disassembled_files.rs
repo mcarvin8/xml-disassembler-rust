@@ -4,8 +4,11 @@ use crate::builders::{build_disassembled_file, extract_root_attributes};
 use crate::parsers::{
     extract_xml_declaration_from_raw, extract_xmlns_from_raw, parse_element_unified,
 };
-use crate::types::{BuildDisassembledFilesOptions, XmlElementArrayMap, XmlElementParams};
+use crate::types::{
+    BuildDisassembledFilesOptions, DecomposeRule, XmlElementArrayMap, XmlElementParams,
+};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 use tokio::fs;
 
 const BATCH_SIZE: usize = 20;
@@ -108,6 +111,39 @@ async fn disassemble_element_keys(
     (leaf_content, nested_groups, leaf_count, has_nested_elements)
 }
 
+/// Extract string from an element's field - handles direct strings and objects with #text (XML leaf elements).
+fn get_field_value(element: &Value, field: &str) -> Option<String> {
+    let obj = element.as_object()?;
+    let v = obj.get(field)?;
+    if let Some(s) = v.as_str() {
+        return Some(s.to_string());
+    }
+    if let Some(child) = v.as_object() {
+        if let Some(text) = child.get("#text").and_then(|t| t.as_str()) {
+            return Some(text.to_string());
+        }
+    }
+    None
+}
+
+/// For group mode: use the segment before the first '.' as key when present (e.g. "Account.Name" -> "Account").
+fn group_key_from_field_value(s: &str) -> &str {
+    s.find('.').map(|i| &s[..i]).unwrap_or(s)
+}
+
+/// Sanitize a string for use as a filename (no path separators or invalid chars).
+fn sanitize_filename(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 async fn write_nested_groups(
     nested_groups: &XmlElementArrayMap,
     strategy: &str,
@@ -116,22 +152,104 @@ async fn write_nested_groups(
     if strategy != "grouped-by-tag" {
         return;
     }
+    let decompose_by_tag: HashMap<&str, &DecomposeRule> = options
+        .decompose_rules
+        .map(|rules| rules.iter().map(|r| (r.tag.as_str(), r)).collect())
+        .unwrap_or_default();
+
     for (tag, arr) in nested_groups {
-        let _ = build_disassembled_file(crate::types::BuildDisassembledFileOptions {
-            content: Value::Array(arr.clone()),
-            disassembled_path: options.disassembled_path,
-            output_file_name: Some(&format!("{}.{}", tag, options.format)),
-            subdirectory: None,
-            wrap_key: Some(tag),
-            is_grouped_array: true,
-            root_element_name: options.root_element_name,
-            root_attributes: options.root_attributes.clone(),
-            format: options.format,
-            xml_declaration: options.xml_declaration.clone(),
-            unique_id_elements: None,
-        })
-        .await;
+        let rule = decompose_by_tag.get(tag.as_str());
+        let path_segment = rule
+            .map(|r| {
+                if r.path_segment.is_empty() {
+                    &r.tag
+                } else {
+                    &r.path_segment
+                }
+            })
+            .unwrap_or(tag);
+
+        if let Some(r) = rule {
+            if r.mode == "split" {
+                for (idx, item) in arr.iter().enumerate() {
+                    let name = get_field_value(item, &r.field)
+                        .as_deref()
+                        .map(sanitize_filename)
+                        .filter(|s: &String| !s.is_empty())
+                        .unwrap_or_else(|| idx.to_string());
+                    let file_name = format!("{}.{}-meta.{}", name, tag, options.format);
+                    let _ = build_disassembled_file(crate::types::BuildDisassembledFileOptions {
+                        content: item.clone(),
+                        disassembled_path: options.disassembled_path,
+                        output_file_name: Some(&file_name),
+                        subdirectory: Some(path_segment),
+                        wrap_key: Some(tag),
+                        is_grouped_array: false,
+                        root_element_name: options.root_element_name,
+                        root_attributes: options.root_attributes.clone(),
+                        format: options.format,
+                        xml_declaration: options.xml_declaration.clone(),
+                        unique_id_elements: None,
+                    })
+                    .await;
+                }
+            } else if r.mode == "group" {
+                let mut by_key: HashMap<String, Vec<Value>> = HashMap::new();
+                for item in arr {
+                    let key = get_field_value(item, &r.field)
+                        .as_deref()
+                        .map(group_key_from_field_value)
+                        .map(sanitize_filename)
+                        .filter(|s: &String| !s.is_empty())
+                        .unwrap_or_else(|| "unknown".to_string());
+                    by_key.entry(key).or_default().push(item.clone());
+                }
+                for (key, group) in by_key {
+                    let file_name = format!("{}.{}-meta.{}", key, tag, options.format);
+                    let _ = build_disassembled_file(crate::types::BuildDisassembledFileOptions {
+                        content: Value::Array(group),
+                        disassembled_path: options.disassembled_path,
+                        output_file_name: Some(&file_name),
+                        subdirectory: Some(path_segment),
+                        wrap_key: Some(tag),
+                        is_grouped_array: true,
+                        root_element_name: options.root_element_name,
+                        root_attributes: options.root_attributes.clone(),
+                        format: options.format,
+                        xml_declaration: options.xml_declaration.clone(),
+                        unique_id_elements: None,
+                    })
+                    .await;
+                }
+            } else {
+                fallback_write_one_file(tag, arr, path_segment, options).await;
+            }
+        } else {
+            fallback_write_one_file(tag, arr, path_segment, options).await;
+        }
     }
+}
+
+async fn fallback_write_one_file(
+    tag: &str,
+    arr: &[Value],
+    _path_segment: &str,
+    options: &WriteNestedOptions<'_>,
+) {
+    let _ = build_disassembled_file(crate::types::BuildDisassembledFileOptions {
+        content: Value::Array(arr.to_vec()),
+        disassembled_path: options.disassembled_path,
+        output_file_name: Some(&format!("{}.{}", tag, options.format)),
+        subdirectory: None,
+        wrap_key: Some(tag),
+        is_grouped_array: true,
+        root_element_name: options.root_element_name,
+        root_attributes: options.root_attributes.clone(),
+        format: options.format,
+        xml_declaration: options.xml_declaration.clone(),
+        unique_id_elements: None,
+    })
+    .await;
 }
 
 struct WriteNestedOptions<'a> {
@@ -140,6 +258,7 @@ struct WriteNestedOptions<'a> {
     root_attributes: Value,
     xml_declaration: Option<Value>,
     format: &'a str,
+    decompose_rules: Option<&'a [DecomposeRule]>,
 }
 
 pub async fn build_disassembled_files_unified(
@@ -153,6 +272,7 @@ pub async fn build_disassembled_files_unified(
         format,
         unique_id_elements,
         strategy,
+        decompose_rules,
     } = options;
 
     let xml_content = match fs::read_to_string(file_path).await {
@@ -215,6 +335,7 @@ pub async fn build_disassembled_files_unified(
         root_attributes: root_attributes.clone(),
         xml_declaration: xml_declaration.clone(),
         format,
+        decompose_rules,
     };
     write_nested_groups(&nested_groups, strategy, &write_opts).await;
 

@@ -97,6 +97,7 @@ xml-disassembler parse <path>
 | `--ignore-path <path>` | Path to the ignore file | .xmldisassemblerignore |
 | `--format <fmt>` | Output format: xml, json, json5, yaml | xml |
 | `--strategy <name>` | unique-id or grouped-by-tag | unique-id |
+| `-p`, `--split-tags <spec>` | With grouped-by-tag: split or group nested tags into subdirs (e.g. `objectPermissions:split:object,fieldPermissions:group:field`) | (none) |
 | `--multi-level <spec>` | Further disassemble matching files: `file_pattern:root_to_strip:unique_id_elements` | (none) |
 
 #### Reassemble options
@@ -169,6 +170,21 @@ xml-disassembler disassemble ./my.xml --strategy grouped-by-tag --format yaml
 ```
 
 Reassembly preserves element content and structure.
+
+#### Split tags (`-p` / `--split-tags`)
+
+With `--strategy grouped-by-tag`, you can optionally **split** or **group** specific nested tags into subdirectories instead of a single file per tag. Useful for permission sets and similar metadata: e.g. one file per `objectPermissions` under `objectPermissions/`, and `fieldPermissions` grouped by object under `fieldPermissions/`.
+
+Spec: comma-separated rules. Each rule is `tag:mode:field` or `tag:path:mode:field` (path defaults to tag). **mode** is `split` (one file per array item, filename from `field`) or `group` (group array items by `field`, one file per group).
+
+```bash
+# Permission set: objectPermissions → one file per object; fieldPermissions → one file per field value
+xml-disassembler disassemble fixtures/split-tags/HR_Admin.permissionset-meta.xml \
+  --strategy grouped-by-tag \
+  -p "objectPermissions:split:object,fieldPermissions:group:field"
+```
+
+Creates `HR_Admin/` with e.g. `objectPermissions/Job_Request__c.objectPermissions-meta.xml`, `objectPermissions/Account.objectPermissions-meta.xml`, `fieldPermissions/<fieldValue>.fieldPermissions-meta.xml`, plus the main `HR_Admin.permissionset-meta.xml` with the rest. Reassembly requires no changes: the existing reassemble command merges subdirs and files back into one XML.
 
 ### Multi-level disassembly
 

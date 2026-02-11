@@ -6,7 +6,7 @@ use crate::multi_level::{
     strip_root_and_build_xml,
 };
 use crate::parsers::parse_xml;
-use crate::types::{BuildDisassembledFilesOptions, MultiLevelRule};
+use crate::types::{BuildDisassembledFilesOptions, DecomposeRule, MultiLevelRule};
 use ignore::gitignore::GitignoreBuilder;
 use std::path::Path;
 use tokio::fs;
@@ -62,6 +62,7 @@ impl DisassembleXmlFileHandler {
         ignore_path: &str,
         format: &str,
         multi_level_rule: Option<&MultiLevelRule>,
+        decompose_rules: Option<&[DecomposeRule]>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let strategy = strategy.unwrap_or("unique-id");
         let strategy = if ["unique-id", "grouped-by-tag"].contains(&strategy) {
@@ -92,6 +93,7 @@ impl DisassembleXmlFileHandler {
                 post_purge,
                 format,
                 multi_level_rule,
+                decompose_rules,
             )
             .await?;
         } else if meta.is_dir() {
@@ -103,6 +105,7 @@ impl DisassembleXmlFileHandler {
                 post_purge,
                 format,
                 multi_level_rule,
+                decompose_rules,
             )
             .await?;
         }
@@ -121,6 +124,7 @@ impl DisassembleXmlFileHandler {
         post_purge: bool,
         format: &str,
         multi_level_rule: Option<&MultiLevelRule>,
+        decompose_rules: Option<&[DecomposeRule]>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let resolved = Path::new(file_path)
             .canonicalize()
@@ -150,6 +154,7 @@ impl DisassembleXmlFileHandler {
             post_purge,
             format,
             multi_level_rule,
+            decompose_rules,
         )
         .await
     }
@@ -164,6 +169,7 @@ impl DisassembleXmlFileHandler {
         post_purge: bool,
         format: &str,
         multi_level_rule: Option<&MultiLevelRule>,
+        decompose_rules: Option<&[DecomposeRule]>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut entries = fs::read_dir(dir_path).await?;
         let cwd = std::env::current_dir().unwrap_or_else(|_| Path::new(".").to_path_buf());
@@ -190,6 +196,7 @@ impl DisassembleXmlFileHandler {
                         post_purge,
                         format,
                         multi_level_rule,
+                        decompose_rules,
                     )
                     .await?;
                 }
@@ -209,6 +216,7 @@ impl DisassembleXmlFileHandler {
         post_purge: bool,
         format: &str,
         multi_level_rule: Option<&MultiLevelRule>,
+        decompose_rules: Option<&[DecomposeRule]>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         log::debug!("Parsing file to disassemble: {}", file_path);
 
@@ -231,6 +239,7 @@ impl DisassembleXmlFileHandler {
             format,
             unique_id_elements,
             strategy,
+            decompose_rules,
         })
         .await?;
 
@@ -323,6 +332,7 @@ impl DisassembleXmlFileHandler {
                         format,
                         unique_id_elements: Some(&rule.unique_id_elements),
                         strategy: "unique-id",
+                        decompose_rules: None,
                     })
                     .await?;
 

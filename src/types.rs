@@ -55,6 +55,20 @@ pub struct UnifiedParseResult {
 /// Map of tag name to array of elements.
 pub type XmlElementArrayMap = std::collections::HashMap<String, Vec<XmlElement>>;
 
+/// Rule for decomposing a nested tag when using grouped-by-tag strategy.
+/// E.g. write each &lt;objectPermissions&gt; to its own file, or group &lt;fieldPermissions&gt; by object.
+#[derive(Debug, Clone)]
+pub struct DecomposeRule {
+    /// Element tag to decompose (e.g. "objectPermissions", "fieldPermissions").
+    pub tag: String,
+    /// Subdirectory under disassembled path (defaults to tag if empty).
+    pub path_segment: String,
+    /// "split" = one file per array item (filename from field); "group" = group by field, one file per group.
+    pub mode: String,
+    /// Field name: for split, used for filename; for group, used to group items.
+    pub field: String,
+}
+
 /// Options for building disassembled files from a source file.
 #[derive(Debug, Clone)]
 pub struct BuildDisassembledFilesOptions<'a> {
@@ -65,6 +79,8 @@ pub struct BuildDisassembledFilesOptions<'a> {
     pub format: &'a str,
     pub unique_id_elements: Option<&'a str>,
     pub strategy: &'a str,
+    /// When strategy is grouped-by-tag, optionally decompose specific tags (split or group by field).
+    pub decompose_rules: Option<&'a [DecomposeRule]>,
 }
 
 /// Parameters for writing leaf content.
