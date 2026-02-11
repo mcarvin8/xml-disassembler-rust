@@ -1,0 +1,37 @@
+src/main.rs
+  8b9008c6a85f12b0 5,19,22-36,38-56,92,148-156,176,215,228,238-250,256,262
+src/builders/build_disassembled_files.rs
+  8b9008c6a85f12b0 8,11,114-146,155-159,161-162,164-167,169-182,184-213,220-229,233-252,261,275,338
+src/lib.rs
+  8b9008c6a85f12b0 20
+src/handlers/disassemble.rs
+  8b9008c6a85f12b0 9,65,96,108,127,157,172,199,219,242,335
+src/types.rs
+  8b9008c6a85f12b0 58-71,82-83
+tests/disassemble_reassemble.rs
+  8b9008c6a85f12b0 5,40,98,160,225,298,324-398
+README.md
+  8b9008c6a85f12b0 100,174-188
+fixtures/split-tags/HR_Admin.permissionset-meta.xml
+  8b9008c6a85f12b0 1-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.2",
+  "base_commit_sha": "112884e08b567867fd9c941a86d6eac001db1735",
+  "prompts": {
+    "8b9008c6a85f12b0": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "28212711-73ea-4de9-9f28-e02ed73030e4",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 407,
+      "total_deletions": 40,
+      "accepted_lines": 384,
+      "overriden_lines": 2
+    }
+  }
+}
