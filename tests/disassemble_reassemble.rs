@@ -36,6 +36,7 @@ async fn disassemble_then_reassemble_matches_original_xml() {
             false,
             ".xmldisassemblerignore",
             "xml",
+            None,
         )
         .await
         .expect("disassemble");
@@ -92,6 +93,7 @@ async fn cdata_preserved_round_trip() {
             false,
             ".xmldisassemblerignore",
             "xml",
+            None,
         )
         .await
         .expect("disassemble");
@@ -152,6 +154,7 @@ async fn comments_preserved_round_trip() {
             false,
             ".xmldisassemblerignore",
             "xml",
+            None,
         )
         .await
         .expect("disassemble");
@@ -215,6 +218,7 @@ async fn deeply_nested_unique_id_elements_round_trip() {
             false,
             ".xmldisassemblerignore",
             "xml",
+            None,
         )
         .await
         .expect("disassemble");
@@ -242,5 +246,73 @@ async fn deeply_nested_unique_id_elements_round_trip() {
     assert_eq!(
         original_content, reassembled_content,
         "Reassembled XML must match original (deeply nested unique ID elements round-trip)"
+    );
+}
+
+/// Multi-level disassembly: first disassemble by processName etc., then further disassemble
+/// programProcesses by parameterName and ruleName. Reassemble and compare to original.
+#[tokio::test]
+async fn multi_level_disassemble_then_reassemble_matches_original() {
+    let _ = env_logger::try_init();
+
+    let fixture = "fixtures/multi-level/Cloud_Kicks_Inner_Circle.loyaltyProgramSetup-meta.xml";
+    assert!(
+        Path::new(fixture).exists(),
+        "Fixture {} must exist (run from project root)",
+        fixture
+    );
+
+    let original_content = std::fs::read_to_string(fixture).expect("read original fixture");
+
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let disassembled_dir = base.join("Cloud_Kicks_Inner_Circle");
+
+    let source_in_temp = base.join("Cloud_Kicks_Inner_Circle.loyaltyProgramSetup-meta.xml");
+    std::fs::copy(fixture, &source_in_temp).expect("copy fixture to temp");
+
+    let rule = xml_disassembler::MultiLevelRule {
+        file_pattern: "programProcesses".to_string(),
+        root_to_strip: "programProcesses".to_string(),
+        unique_id_elements: "parameterName,ruleName".to_string(),
+        path_segment: "programProcesses".to_string(),
+        wrap_root_element: "LoyaltyProgramSetup".to_string(),
+        wrap_xmlns: String::new(),
+    };
+
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            source_in_temp.to_str().unwrap(),
+            Some("fullName,name,processName"),
+            Some("unique-id"),
+            false,
+            false,
+            ".xmldisassemblerignore",
+            "xml",
+            Some(&rule),
+        )
+        .await
+        .expect("disassemble");
+
+    assert!(
+        disassembled_dir.exists(),
+        "Disassembled directory should exist"
+    );
+
+    let reassemble_handler = ReassembleXmlFileHandler::new();
+    reassemble_handler
+        .reassemble(disassembled_dir.to_str().unwrap(), Some("xml"), false)
+        .await
+        .expect("reassemble");
+
+    let reassembled_path = base.join("Cloud_Kicks_Inner_Circle.xml");
+    assert!(reassembled_path.exists(), "Reassembled file should exist");
+
+    let reassembled_content = std::fs::read_to_string(&reassembled_path).expect("read reassembled");
+
+    assert_eq!(
+        original_content, reassembled_content,
+        "Reassembled XML must match original (multi-level round-trip)"
     );
 }

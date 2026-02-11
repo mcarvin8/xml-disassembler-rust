@@ -1,7 +1,12 @@
 //! Disassemble XML file handler.
 
 use crate::builders::build_disassembled_files_unified;
-use crate::types::BuildDisassembledFilesOptions;
+use crate::multi_level::{
+    capture_xmlns_from_root, path_segment_from_file_pattern, save_multi_level_config,
+    strip_root_and_build_xml,
+};
+use crate::parsers::parse_xml;
+use crate::types::{BuildDisassembledFilesOptions, MultiLevelRule};
 use ignore::gitignore::GitignoreBuilder;
 use std::path::Path;
 use tokio::fs;
@@ -56,6 +61,7 @@ impl DisassembleXmlFileHandler {
         post_purge: bool,
         ignore_path: &str,
         format: &str,
+        multi_level_rule: Option<&MultiLevelRule>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let strategy = strategy.unwrap_or("unique-id");
         let strategy = if ["unique-id", "grouped-by-tag"].contains(&strategy) {
@@ -85,6 +91,7 @@ impl DisassembleXmlFileHandler {
                 pre_purge,
                 post_purge,
                 format,
+                multi_level_rule,
             )
             .await?;
         } else if meta.is_dir() {
@@ -95,6 +102,7 @@ impl DisassembleXmlFileHandler {
                 pre_purge,
                 post_purge,
                 format,
+                multi_level_rule,
             )
             .await?;
         }
@@ -112,6 +120,7 @@ impl DisassembleXmlFileHandler {
         pre_purge: bool,
         post_purge: bool,
         format: &str,
+        multi_level_rule: Option<&MultiLevelRule>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let resolved = Path::new(file_path)
             .canonicalize()
@@ -140,10 +149,12 @@ impl DisassembleXmlFileHandler {
             pre_purge,
             post_purge,
             format,
+            multi_level_rule,
         )
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle_directory(
         &self,
         dir_path: &str,
@@ -152,6 +163,7 @@ impl DisassembleXmlFileHandler {
         pre_purge: bool,
         post_purge: bool,
         format: &str,
+        multi_level_rule: Option<&MultiLevelRule>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut entries = fs::read_dir(dir_path).await?;
         let cwd = std::env::current_dir().unwrap_or_else(|_| Path::new(".").to_path_buf());
@@ -177,6 +189,7 @@ impl DisassembleXmlFileHandler {
                         pre_purge,
                         post_purge,
                         format,
+                        multi_level_rule,
                     )
                     .await?;
                 }
@@ -195,6 +208,7 @@ impl DisassembleXmlFileHandler {
         pre_purge: bool,
         post_purge: bool,
         format: &str,
+        multi_level_rule: Option<&MultiLevelRule>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         log::debug!("Parsing file to disassemble: {}", file_path);
 
@@ -218,7 +232,137 @@ impl DisassembleXmlFileHandler {
             unique_id_elements,
             strategy,
         })
-        .await
+        .await?;
+
+        if let Some(rule) = multi_level_rule {
+            self.recursively_disassemble_multi_level(&output_path, rule, format)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Recursively walk the disassembly output; for XML files matching the rule's file_pattern,
+    /// strip the root and re-disassemble with the rule's unique_id_elements.
+    async fn recursively_disassemble_multi_level(
+        &self,
+        dir_path: &Path,
+        rule: &MultiLevelRule,
+        format: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut config = crate::multi_level::load_multi_level_config(dir_path)
+            .await
+            .unwrap_or_default();
+
+        let mut stack = vec![dir_path.to_path_buf()];
+        while let Some(current) = stack.pop() {
+            let mut entries = Vec::new();
+            let mut read_dir = fs::read_dir(&current).await?;
+            while let Some(entry) = read_dir.next_entry().await? {
+                entries.push(entry);
+            }
+
+            for entry in entries {
+                let path = entry.path();
+                let path_str = path.to_string_lossy().to_string();
+
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.is_file() {
+                    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    let path_str_check = path.to_string_lossy();
+                    if !name.ends_with(".xml")
+                        || (!name.contains(&rule.file_pattern)
+                            && !path_str_check.contains(&rule.file_pattern))
+                    {
+                        continue;
+                    }
+
+                    let parsed = match parse_xml(&path_str).await {
+                        Some(p) => p,
+                        None => continue,
+                    };
+                    let has_element_to_strip = parsed
+                        .as_object()
+                        .and_then(|o| {
+                            let root_key = o.keys().find(|k| *k != "?xml")?;
+                            let root_val = o.get(root_key)?.as_object()?;
+                            Some(
+                                root_key == &rule.root_to_strip
+                                    || root_val.contains_key(&rule.root_to_strip),
+                            )
+                        })
+                        .unwrap_or(false);
+                    if !has_element_to_strip {
+                        continue;
+                    }
+
+                    let wrap_xmlns = capture_xmlns_from_root(&parsed).unwrap_or_default();
+
+                    let stripped_xml = match strip_root_and_build_xml(&parsed, &rule.root_to_strip)
+                    {
+                        Some(xml) => xml,
+                        None => continue,
+                    };
+
+                    fs::write(&path, stripped_xml).await?;
+
+                    let file_stem = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("output");
+                    let output_dir_name = file_stem.split('.').next().unwrap_or(file_stem);
+                    let parent = path.parent().unwrap_or(dir_path);
+                    let second_level_output = parent.join(output_dir_name);
+
+                    build_disassembled_files_unified(BuildDisassembledFilesOptions {
+                        file_path: &path_str,
+                        disassembled_path: second_level_output.to_str().unwrap_or("."),
+                        base_name: output_dir_name,
+                        post_purge: true,
+                        format,
+                        unique_id_elements: Some(&rule.unique_id_elements),
+                        strategy: "unique-id",
+                    })
+                    .await?;
+
+                    if config.rules.is_empty() {
+                        let wrap_root = parsed
+                            .as_object()
+                            .and_then(|o| o.keys().find(|k| *k != "?xml").cloned())
+                            .unwrap_or_else(|| rule.wrap_root_element.clone());
+                        config.rules.push(MultiLevelRule {
+                            file_pattern: rule.file_pattern.clone(),
+                            root_to_strip: rule.root_to_strip.clone(),
+                            unique_id_elements: rule.unique_id_elements.clone(),
+                            path_segment: if rule.path_segment.is_empty() {
+                                path_segment_from_file_pattern(&rule.file_pattern)
+                            } else {
+                                rule.path_segment.clone()
+                            },
+                            // Persist document root (e.g. LoyaltyProgramSetup) so reassembly uses it as root with xmlns;
+                            // path_segment (e.g. programProcesses) is the inner wrapper in each file.
+                            wrap_root_element: wrap_root,
+                            wrap_xmlns: if rule.wrap_xmlns.is_empty() {
+                                wrap_xmlns
+                            } else {
+                                rule.wrap_xmlns.clone()
+                            },
+                        });
+                    } else if let Some(r) = config.rules.first_mut() {
+                        if r.wrap_xmlns.is_empty() {
+                            r.wrap_xmlns = wrap_xmlns;
+                        }
+                    }
+                }
+            }
+        }
+
+        if !config.rules.is_empty() {
+            save_multi_level_config(dir_path, &config).await?;
+        }
+
+        Ok(())
     }
 }
 

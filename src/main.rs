@@ -2,7 +2,8 @@
 
 use std::env;
 use xml_disassembler::{
-    build_xml_string, parse_xml, DisassembleXmlFileHandler, ReassembleXmlFileHandler,
+    build_xml_string, parse_xml, DisassembleXmlFileHandler, MultiLevelRule,
+    ReassembleXmlFileHandler,
 };
 
 /// Options parsed from disassemble CLI args.
@@ -14,6 +15,29 @@ struct DisassembleOpts<'a> {
     ignore_path: &'a str,
     format: &'a str,
     strategy: Option<&'a str>,
+    multi_level: Option<String>,
+}
+
+/// Parse --multi-level spec: "file_pattern:root_to_strip:unique_id_elements"
+/// e.g. "programProcesses-meta:LoyaltyProgramSetup:parameterName,ruleName"
+fn parse_multi_level_spec(spec: &str) -> Option<MultiLevelRule> {
+    let parts: Vec<&str> = spec.splitn(3, ':').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let (file_pattern, root_to_strip, unique_id_elements) = (parts[0], parts[1], parts[2]);
+    if file_pattern.is_empty() || root_to_strip.is_empty() || unique_id_elements.is_empty() {
+        return None;
+    }
+    let path_segment = xml_disassembler::path_segment_from_file_pattern(file_pattern);
+    Some(MultiLevelRule {
+        file_pattern: file_pattern.to_string(),
+        root_to_strip: root_to_strip.to_string(),
+        unique_id_elements: unique_id_elements.to_string(),
+        path_segment: path_segment.clone(),
+        wrap_root_element: root_to_strip.to_string(),
+        wrap_xmlns: String::new(),
+    })
 }
 
 /// Parse disassemble args: <path> [options].
@@ -26,6 +50,7 @@ fn parse_disassemble_args(args: &[String]) -> DisassembleOpts<'_> {
     let mut ignore_path = ".xmldisassemblerignore";
     let mut format = "xml";
     let mut strategy = None;
+    let mut multi_level = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -72,6 +97,15 @@ fn parse_disassemble_args(args: &[String]) -> DisassembleOpts<'_> {
                 strategy = Some(args[i].as_str());
                 i += 1;
             }
+        } else if arg.starts_with("--multi-level=") {
+            multi_level = Some(arg.trim_start_matches("--multi-level=").to_string());
+            i += 1;
+        } else if arg == "--multi-level" {
+            i += 1;
+            if i < args.len() {
+                multi_level = Some(args[i].clone());
+                i += 1;
+            }
         } else if arg.starts_with("--") {
             i += 1;
         } else if path.is_none() {
@@ -90,6 +124,7 @@ fn parse_disassemble_args(args: &[String]) -> DisassembleOpts<'_> {
         ignore_path,
         format,
         strategy,
+        multi_level,
     }
 }
 
@@ -127,6 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         eprintln!(
             "    --strategy <name>              - unique-id or grouped-by-tag (default: unique-id)"
         );
+        eprintln!("    --multi-level <spec>          - Further disassemble matching files: file_pattern:root_to_strip:unique_id_elements");
         eprintln!("  reassemble <path> [extension] [--postpurge]  - Reassemble directory (default extension: xml)");
         eprintln!("  parse <path>                    - Parse and rebuild XML (test)");
         return Ok(());
@@ -139,6 +175,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         "disassemble" => {
             let opts = parse_disassemble_args(&args[2..]);
             let path = opts.path.unwrap_or(".");
+            let multi_level_rule = opts
+                .multi_level
+                .as_ref()
+                .and_then(|s| parse_multi_level_spec(s));
+            if opts.multi_level.is_some() && multi_level_rule.is_none() {
+                eprintln!(
+                    "Invalid --multi-level spec; use file_pattern:root_to_strip:unique_id_elements"
+                );
+            }
             let mut handler = DisassembleXmlFileHandler::new();
             handler
                 .disassemble(
@@ -149,6 +194,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     opts.post_purge,
                     opts.ignore_path,
                     opts.format,
+                    multi_level_rule.as_ref(),
                 )
                 .await?;
         }

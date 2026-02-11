@@ -86,3 +86,29 @@ pub struct LeafWriteOptions<'a> {
     pub xml_declaration: Option<XmlElement>,
     pub format: &'a str,
 }
+
+/// Rule for multi-level disassembly: which files to further disassemble and how.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MultiLevelRule {
+    /// File name pattern (e.g. "programProcesses-meta"); any XML file whose name contains this is processed.
+    pub file_pattern: String,
+    /// Root element to strip (e.g. "LoyaltyProgramSetup"); its inner content becomes the new document.
+    pub root_to_strip: String,
+    /// Comma-separated unique-id elements for the second-level disassembly (e.g. "parameterName,ruleName").
+    pub unique_id_elements: String,
+    /// Path segment under the disassembly root for reassembly (e.g. "programProcesses").
+    #[serde(default)]
+    pub path_segment: String,
+    /// Root element name to wrap reassembled files with (defaults to root_to_strip).
+    #[serde(default)]
+    pub wrap_root_element: String,
+    /// xmlns value for the wrap root (optional; captured from original when stripping).
+    #[serde(default)]
+    pub wrap_xmlns: String,
+}
+
+/// Persisted config for multi-level reassembly (stored as .multi_level.json in the disassembly root).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct MultiLevelConfig {
+    pub rules: Vec<MultiLevelRule>,
+}
