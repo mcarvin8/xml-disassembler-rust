@@ -1,12 +1,29 @@
 //! Reassemble XML from disassembled directory.
 
 use crate::builders::{build_xml_string, merge_xml_elements, reorder_root_keys};
+use crate::multi_level::{ensure_segment_files_structure, load_multi_level_config};
 use crate::parsers::parse_to_xml_object;
 use crate::types::XmlElement;
+use serde_json::{Map, Value};
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use tokio::fs;
+
+/// Remove @xmlns from an object so the reassembled segment wrapper (e.g. programProcesses) has no xmlns.
+fn strip_xmlns_from_value(v: Value) -> Value {
+    let obj = match v.as_object() {
+        Some(o) => o,
+        None => return v,
+    };
+    let mut out = Map::new();
+    for (k, val) in obj {
+        if k != "@xmlns" {
+            out.insert(k.clone(), val.clone());
+        }
+    }
+    Value::Object(out)
+}
 
 type ProcessDirFuture<'a> = Pin<
     Box<
@@ -33,9 +50,83 @@ impl ReassembleXmlFileHandler {
             return Ok(());
         }
 
+        let path = Path::new(file_path);
+        let config = load_multi_level_config(path).await;
+        if let Some(ref config) = config {
+            for rule in &config.rules {
+                if rule.path_segment.is_empty() {
+                    continue;
+                }
+                let segment_path = path.join(&rule.path_segment);
+                if !segment_path.is_dir() {
+                    continue;
+                }
+                let mut entries = Vec::new();
+                let mut read_dir = fs::read_dir(&segment_path).await?;
+                while let Some(entry) = read_dir.next_entry().await? {
+                    entries.push(entry);
+                }
+                for entry in entries {
+                    let process_path = entry.path();
+                    if !process_path.is_dir() {
+                        continue;
+                    }
+                    let process_path_str = process_path.to_string_lossy().to_string();
+                    let mut sub_entries = Vec::new();
+                    let mut sub_read = fs::read_dir(&process_path).await?;
+                    while let Some(e) = sub_read.next_entry().await? {
+                        sub_entries.push(e);
+                    }
+                    for sub_entry in sub_entries {
+                        let sub_path = sub_entry.path();
+                        if sub_path.is_dir() {
+                            let sub_path_str = sub_path.to_string_lossy().to_string();
+                            self.reassemble_plain(&sub_path_str, Some("xml"), true, None)
+                                .await?;
+                        }
+                    }
+                    self.reassemble_plain(&process_path_str, Some("xml"), true, None)
+                        .await?;
+                }
+                ensure_segment_files_structure(
+                    &segment_path,
+                    &rule.wrap_root_element,
+                    &rule.path_segment,
+                    &rule.wrap_xmlns,
+                )
+                .await?;
+            }
+        }
+
+        let base_segment = config.as_ref().and_then(|c| {
+            c.rules.first().map(|r| {
+                (
+                    file_path.to_string(),
+                    r.path_segment.clone(),
+                    true, // extract_inner: segment files have document_root > segment > content
+                )
+            })
+        });
+        // When multi-level reassembly is done, purge the entire disassembled directory
+        let post_purge_final = post_purge || config.is_some();
+        self.reassemble_plain(file_path, file_extension, post_purge_final, base_segment)
+            .await
+    }
+
+    /// Merge and write reassembled XML (no multi-level pre-step). Used internally.
+    /// When base_segment is Some((base_path, segment_name, extract_inner)), processing that base path
+    /// treats the segment subdir as one key whose value is an array; when extract_inner is true,
+    /// each file's root has document_root > segment > content and we use content (not whole root).
+    async fn reassemble_plain(
+        &self,
+        file_path: &str,
+        file_extension: Option<&str>,
+        post_purge: bool,
+        base_segment: Option<(String, String, bool)>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         log::debug!("Parsing directory to reassemble: {}", file_path);
         let parsed_objects = self
-            .process_files_in_directory(file_path.to_string())
+            .process_files_in_directory(file_path.to_string(), base_segment)
             .await?;
 
         if parsed_objects.is_empty() {
@@ -75,7 +166,11 @@ impl ReassembleXmlFileHandler {
         Ok(())
     }
 
-    fn process_files_in_directory<'a>(&'a self, dir_path: String) -> ProcessDirFuture<'a> {
+    fn process_files_in_directory<'a>(
+        &'a self,
+        dir_path: String,
+        base_segment: Option<(String, String, bool)>,
+    ) -> ProcessDirFuture<'a> {
         Box::pin(async move {
             let mut parsed = Vec::new();
             let mut entries = Vec::new();
@@ -103,6 +198,13 @@ impl ReassembleXmlFileHandler {
                 a_base.cmp(&b_base)
             });
 
+            let is_base = base_segment
+                .as_ref()
+                .map(|(base, _, _)| dir_path == *base)
+                .unwrap_or(false);
+            let segment_name = base_segment.as_ref().map(|(_, name, _)| name.as_str());
+            let extract_inner = base_segment.as_ref().map(|(_, _, e)| *e).unwrap_or(false);
+
             for entry in entries {
                 let path = entry.path();
                 let file_path = path.to_string_lossy().to_string();
@@ -115,13 +217,106 @@ impl ReassembleXmlFileHandler {
                         }
                     }
                 } else if path.is_dir() {
-                    let sub_parsed = self.process_files_in_directory(file_path).await?;
-                    parsed.extend(sub_parsed);
+                    let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if is_base && segment_name == Some(dir_name) {
+                        let segment_element = self
+                            .collect_segment_as_array(
+                                &file_path,
+                                segment_name.unwrap(),
+                                extract_inner,
+                            )
+                            .await?;
+                        if let Some(el) = segment_element {
+                            parsed.push(el);
+                        }
+                    } else {
+                        let sub_parsed = self
+                            .process_files_in_directory(file_path, base_segment.clone())
+                            .await?;
+                        parsed.extend(sub_parsed);
+                    }
                 }
             }
 
             Ok(parsed)
         })
+    }
+
+    /// Collect all .xml files in a directory, parse each, and build one element with
+    /// root_key and single key segment_name whose value is array of each file's content.
+    /// When extract_inner is true, each file has root > segment_name > content; we push that content.
+    async fn collect_segment_as_array(
+        &self,
+        segment_dir: &str,
+        segment_name: &str,
+        extract_inner: bool,
+    ) -> Result<Option<XmlElement>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut xml_files = Vec::new();
+        let mut read_dir = fs::read_dir(segment_dir).await?;
+        while let Some(entry) = read_dir.next_entry().await? {
+            let path = entry.path();
+            if path.is_file() {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if !name.starts_with('.') && self.is_parsable_file(name) {
+                    xml_files.push(path.to_string_lossy().to_string());
+                }
+            }
+        }
+        xml_files.sort();
+
+        let mut root_contents = Vec::new();
+        let mut first_xml: Option<(String, Option<Value>)> = None;
+        for file_path in &xml_files {
+            let parsed = match parse_to_xml_object(file_path).await {
+                Some(p) => p,
+                None => continue,
+            };
+            let obj = match parsed.as_object() {
+                Some(o) => o,
+                None => continue,
+            };
+            let root_key = match obj.keys().find(|k| *k != "?xml").cloned() {
+                Some(k) => k,
+                None => continue,
+            };
+            let root_val = obj
+                .get(&root_key)
+                .cloned()
+                .unwrap_or(Value::Object(serde_json::Map::new()));
+            let mut content = if extract_inner {
+                root_val
+                    .get(segment_name)
+                    .cloned()
+                    .unwrap_or_else(|| Value::Object(serde_json::Map::new()))
+            } else {
+                root_val
+            };
+            // Inner segment element (e.g. programProcesses) should not have xmlns in output
+            if extract_inner {
+                content = strip_xmlns_from_value(content);
+            }
+            root_contents.push(content);
+            if first_xml.is_none() {
+                first_xml = Some((root_key, obj.get("?xml").cloned()));
+            }
+        }
+        if root_contents.is_empty() {
+            return Ok(None);
+        }
+        let (root_key, decl_opt) = first_xml.unwrap();
+        let mut content = serde_json::Map::new();
+        content.insert(segment_name.to_string(), Value::Array(root_contents));
+        let mut top = serde_json::Map::new();
+        if let Some(decl) = decl_opt {
+            top.insert("?xml".to_string(), decl);
+        } else {
+            let mut d = serde_json::Map::new();
+            d.insert("@version".to_string(), Value::String("1.0".to_string()));
+            d.insert("@encoding".to_string(), Value::String("UTF-8".to_string()));
+            top.insert("?xml".to_string(), Value::Object(d));
+        }
+        top.insert(root_key, Value::Object(content));
+        Ok(Some(Value::Object(top)))
     }
 
     fn is_parsable_file(&self, file_name: &str) -> bool {

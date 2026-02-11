@@ -97,6 +97,7 @@ xml-disassembler parse <path>
 | `--ignore-path <path>` | Path to the ignore file | .xmldisassemblerignore |
 | `--format <fmt>` | Output format: xml, json, json5, yaml | xml |
 | `--strategy <name>` | unique-id or grouped-by-tag | unique-id |
+| `--multi-level <spec>` | Further disassemble matching files: `file_pattern:root_to_strip:unique_id_elements` | (none) |
 
 #### Reassemble options
 
@@ -168,6 +169,30 @@ xml-disassembler disassemble ./my.xml --strategy grouped-by-tag --format yaml
 ```
 
 Reassembly preserves element content and structure.
+
+### Multi-level disassembly
+
+For advanced use cases (e.g. Salesforce Loyalty Program Setup metadata), you can further disassemble specific output files by stripping a root element and re-running disassembly with different unique-id elements.
+
+Use `--multi-level <spec>` where the spec is:
+
+`file_pattern:root_to_strip:unique_id_elements`
+
+- **file_pattern** – Match XML files whose name or path contains this (e.g. `programProcesses` or `programProcesses-meta`).
+- **root_to_strip** – Element to strip/unwrap: if it is the root, its inner content becomes the new document; if it is a child (e.g. `programProcesses` under `LoyaltyProgramSetup`), it is unwrapped so its inner content becomes the root’s direct children.
+- **unique_id_elements** – Comma-separated element names for the second-level disassembly (e.g. `parameterName,ruleName`).
+
+Example (loyalty program): strip the child `programProcesses` in each process file so parameters/rules can be disassembled:
+
+```bash
+xml-disassembler disassemble ./Cloud_Kicks_Inner_Circle.loyaltyProgramSetup-meta.xml \
+  --unique-id-elements "fullName,name,processName" \
+  --multi-level "programProcesses:programProcesses:parameterName,ruleName"
+```
+
+A `.multi_level.json` config is written in the disassembly root so **reassemble** automatically does inner-level reassembly first, wraps files with the original root, then reassembles the top level. No extra flags are needed for reassembly.
+
+**Caveat:** Multi-level reassembly removes disassembled directories after reassembling each level, even when you do not pass `--postpurge`. This is required so the next level can merge the reassembled XML files. Use version control (e.g. Git) to recover the tree if needed, or run reassembly only in a pipeline where these changes can be discarded.
 
 ## Ignore file
 
