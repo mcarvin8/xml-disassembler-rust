@@ -66,6 +66,8 @@ impl ReassembleXmlFileHandler {
                 while let Some(entry) = read_dir.next_entry().await? {
                     entries.push(entry);
                 }
+                // Sort for deterministic cross-platform ordering
+                entries.sort_by_key(|e| e.file_name());
                 for entry in entries {
                     let process_path = entry.path();
                     if !process_path.is_dir() {
@@ -77,6 +79,8 @@ impl ReassembleXmlFileHandler {
                     while let Some(e) = sub_read.next_entry().await? {
                         sub_entries.push(e);
                     }
+                    // Sort for deterministic cross-platform ordering
+                    sub_entries.sort_by_key(|e| e.file_name());
                     for sub_entry in sub_entries {
                         let sub_path = sub_entry.path();
                         if sub_path.is_dir() {
@@ -178,24 +182,11 @@ impl ReassembleXmlFileHandler {
             while let Some(entry) = read_dir.next_entry().await? {
                 entries.push(entry);
             }
+            // Sort by full filename for deterministic cross-platform ordering
             entries.sort_by(|a, b| {
-                let a_base: String = a
-                    .file_name()
-                    .to_str()
-                    .unwrap_or("")
-                    .split('.')
-                    .next()
-                    .unwrap_or("")
-                    .to_string();
-                let b_base: String = b
-                    .file_name()
-                    .to_str()
-                    .unwrap_or("")
-                    .split('.')
-                    .next()
-                    .unwrap_or("")
-                    .to_string();
-                a_base.cmp(&b_base)
+                let a_name = a.file_name().to_string_lossy().to_string();
+                let b_name = b.file_name().to_string_lossy().to_string();
+                a_name.cmp(&b_name)
             });
 
             let is_base = base_segment

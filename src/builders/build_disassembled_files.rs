@@ -204,7 +204,11 @@ async fn write_nested_groups(
                         .unwrap_or_else(|| "unknown".to_string());
                     by_key.entry(key).or_default().push(item.clone());
                 }
-                for (key, group) in by_key {
+                // Sort keys for deterministic cross-platform output order
+                let mut sorted_keys: Vec<_> = by_key.keys().cloned().collect();
+                sorted_keys.sort();
+                for key in sorted_keys {
+                    let group = by_key.remove(&key).unwrap();
                     let file_name = format!("{}.{}-meta.{}", key, tag, options.format);
                     let _ = build_disassembled_file(crate::types::BuildDisassembledFileOptions {
                         content: Value::Array(group),

@@ -100,6 +100,8 @@ pub async fn ensure_segment_files_structure(
     while let Some(entry) = read_dir.next_entry().await? {
         entries.push(entry);
     }
+    // Sort for deterministic cross-platform ordering
+    entries.sort_by_key(|e| e.file_name());
 
     for entry in entries {
         let path = entry.path();
