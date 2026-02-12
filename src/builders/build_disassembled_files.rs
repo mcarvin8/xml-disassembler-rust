@@ -7,6 +7,7 @@ use crate::parsers::{
 use crate::types::{
     BuildDisassembledFilesOptions, DecomposeRule, XmlElementArrayMap, XmlElementParams,
 };
+use crate::utils::normalize_path_unix;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use tokio::fs;
@@ -279,12 +280,14 @@ pub async fn build_disassembled_files_unified(
         decompose_rules,
     } = options;
 
-    let xml_content = match fs::read_to_string(file_path).await {
+    let file_path = normalize_path_unix(file_path);
+
+    let xml_content = match fs::read_to_string(&file_path).await {
         Ok(c) => c,
         Err(_) => return Ok(()),
     };
 
-    let parsed_xml = match crate::parsers::parse_xml_from_str(&xml_content, file_path) {
+    let parsed_xml = match crate::parsers::parse_xml_from_str(&xml_content, &file_path) {
         Some(p) => p,
         None => return Ok(()),
     };
@@ -328,7 +331,7 @@ pub async fn build_disassembled_files_unified(
     if !has_nested_elements && leaf_count > 0 {
         log::error!(
             "The XML file {} only has leaf elements. This file will not be disassembled.",
-            file_path
+            &file_path
         );
         return Ok(());
     }
@@ -373,7 +376,13 @@ pub async fn build_disassembled_files_unified(
     }
 
     if post_purge {
-        let _ = fs::remove_file(file_path).await;
+        if let Err(e) = fs::remove_file(&file_path).await {
+            log::warn!(
+                "Failed to remove source file during post-purge: {} - {}",
+                file_path,
+                e
+            );
+        }
     }
 
     Ok(())

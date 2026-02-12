@@ -7,6 +7,7 @@ use crate::multi_level::{
 };
 use crate::parsers::parse_xml;
 use crate::types::{BuildDisassembledFilesOptions, DecomposeRule, MultiLevelRule};
+use crate::utils::normalize_path_unix;
 use ignore::gitignore::GitignoreBuilder;
 use std::path::Path;
 use tokio::fs;
@@ -129,7 +130,7 @@ impl DisassembleXmlFileHandler {
         let resolved = Path::new(file_path)
             .canonicalize()
             .unwrap_or_else(|_| Path::new(file_path).to_path_buf());
-        let resolved_str = resolved.to_string_lossy();
+        let resolved_str = normalize_path_unix(&resolved.to_string_lossy());
 
         if !Self::is_xml_file(&resolved_str) {
             log::error!(
@@ -145,8 +146,9 @@ impl DisassembleXmlFileHandler {
         }
 
         let dir_path = resolved.parent().unwrap_or(Path::new("."));
+        let dir_path_str = normalize_path_unix(&dir_path.to_string_lossy());
         self.process_file(
-            dir_path.to_str().unwrap_or("."),
+            &dir_path_str,
             strategy,
             &resolved_str,
             unique_id_elements,
@@ -171,7 +173,8 @@ impl DisassembleXmlFileHandler {
         multi_level_rule: Option<&MultiLevelRule>,
         decompose_rules: Option<&[DecomposeRule]>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut entries = fs::read_dir(dir_path).await?;
+        let dir_path = normalize_path_unix(dir_path);
+        let mut entries = fs::read_dir(&dir_path).await?;
         let cwd = std::env::current_dir().unwrap_or_else(|_| Path::new(".").to_path_buf());
 
         while let Some(entry) = entries.next_entry().await? {
@@ -187,10 +190,11 @@ impl DisassembleXmlFileHandler {
                 if self.is_ignored(&relative_sub) {
                     log::warn!("File ignored by ignore rules: {}", sub_file_path);
                 } else {
+                    let sub_file_path_norm = normalize_path_unix(&sub_file_path);
                     self.process_file(
-                        dir_path,
+                        &dir_path,
                         strategy,
-                        &sub_file_path,
+                        &sub_file_path_norm,
                         unique_id_elements,
                         pre_purge,
                         post_purge,
