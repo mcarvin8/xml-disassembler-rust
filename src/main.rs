@@ -2,8 +2,7 @@
 
 use std::env;
 use xml_disassembler::{
-    build_xml_string, parse_xml, DecomposeRule, DisassembleXmlFileHandler, MultiLevelRule,
-    ReassembleXmlFileHandler,
+    DecomposeRule, DisassembleXmlFileHandler, MultiLevelRule, ReassembleXmlFileHandler,
 };
 
 /// Options parsed from disassemble CLI args.
@@ -214,12 +213,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         eprintln!("    --multi-level <spec>          - Further disassemble matching files: file_pattern:root_to_strip:unique_id_elements");
         eprintln!("    -p, --split-tags <spec>       - With grouped-by-tag: split/group nested tags (e.g. objectPermissions:split:object,fieldPermissions:group:field)");
         eprintln!("  reassemble <path> [extension] [--postpurge]  - Reassemble directory (default extension: xml)");
-        eprintln!("  parse <path>                    - Parse and rebuild XML (test)");
         return Ok(());
     }
 
     let command = &args[1];
-    let path = args.get(2).map(|s| s.as_str()).unwrap_or(".");
 
     match command.as_str() {
         "disassemble" => {
@@ -270,14 +267,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             handler
                 .reassemble(path, extension.or(Some("xml")), post_purge)
                 .await?;
-        }
-        "parse" => {
-            if let Some(parsed) = parse_xml(path).await {
-                let xml = build_xml_string(&parsed);
-                println!("{}", xml);
-            } else {
-                eprintln!("Failed to parse {}", path);
-            }
         }
         _ => {
             eprintln!("Unknown command: {}", command);
