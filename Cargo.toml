@@ -1,6 +1,6 @@
 [package]
 name = "xml-disassembler"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "Disassemble large XML files into smaller files and reassemble the original XML."
 repository = "https://github.com/mcarvin8/xml-disassembler-rust"
