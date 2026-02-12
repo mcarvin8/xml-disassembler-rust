@@ -1,0 +1,25 @@
+src/handlers/reassemble.rs
+  8b9008c6a85f12b0 69-70,82-83,185,187-189
+src/builders/build_disassembled_files.rs
+  8b9008c6a85f12b0 207-211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.2",
+  "base_commit_sha": "92e2b7c954ae4d1cf145e5fbbd988cd9fe15d4f6",
+  "prompts": {
+    "8b9008c6a85f12b0": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "28212711-73ea-4de9-9f28-e02ed73030e4",
+        "model": "default"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 15,
+      "total_deletions": 20,
+      "accepted_lines": 13,
+      "overriden_lines": 0
+    }
+  }
+}
