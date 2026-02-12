@@ -21,11 +21,13 @@ pub fn strip_root_and_build_xml(parsed: &XmlElement, element_to_strip: &str) -> 
     });
 
     if root_key == element_to_strip {
-        // Strip the root: new doc = ?xml + inner content of root
+        // Strip the root: new doc = ?xml + inner content of root (element keys only, not @attributes)
         let mut new_obj = Map::new();
         new_obj.insert("?xml".to_string(), decl);
         for (k, v) in root_val {
-            new_obj.insert(k.clone(), v.clone());
+            if !k.starts_with('@') {
+                new_obj.insert(k.clone(), v.clone());
+            }
         }
         return Some(build_xml_string(&Value::Object(new_obj)));
     }

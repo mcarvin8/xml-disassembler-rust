@@ -4,6 +4,7 @@ use crate::builders::{build_xml_string, merge_xml_elements, reorder_root_keys};
 use crate::multi_level::{ensure_segment_files_structure, load_multi_level_config};
 use crate::parsers::parse_to_xml_object;
 use crate::types::XmlElement;
+use crate::utils::normalize_path_unix;
 use serde_json::{Map, Value};
 use std::future::Future;
 use std::path::Path;
@@ -46,11 +47,12 @@ impl ReassembleXmlFileHandler {
         file_extension: Option<&str>,
         post_purge: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if !self.validate_directory(file_path).await? {
+        let file_path = normalize_path_unix(file_path);
+        if !self.validate_directory(&file_path).await? {
             return Ok(());
         }
 
-        let path = Path::new(file_path);
+        let path = Path::new(&file_path);
         let config = load_multi_level_config(path).await;
         if let Some(ref config) = config {
             for rule in &config.rules {
@@ -73,7 +75,7 @@ impl ReassembleXmlFileHandler {
                     if !process_path.is_dir() {
                         continue;
                     }
-                    let process_path_str = process_path.to_string_lossy().to_string();
+                    let process_path_str = normalize_path_unix(&process_path.to_string_lossy());
                     let mut sub_entries = Vec::new();
                     let mut sub_read = fs::read_dir(&process_path).await?;
                     while let Some(e) = sub_read.next_entry().await? {
@@ -84,7 +86,7 @@ impl ReassembleXmlFileHandler {
                     for sub_entry in sub_entries {
                         let sub_path = sub_entry.path();
                         if sub_path.is_dir() {
-                            let sub_path_str = sub_path.to_string_lossy().to_string();
+                            let sub_path_str = normalize_path_unix(&sub_path.to_string_lossy());
                             self.reassemble_plain(&sub_path_str, Some("xml"), true, None)
                                 .await?;
                         }
@@ -105,7 +107,7 @@ impl ReassembleXmlFileHandler {
         let base_segment = config.as_ref().and_then(|c| {
             c.rules.first().map(|r| {
                 (
-                    file_path.to_string(),
+                    file_path.clone(),
                     r.path_segment.clone(),
                     true, // extract_inner: segment files have document_root > segment > content
                 )
@@ -113,7 +115,7 @@ impl ReassembleXmlFileHandler {
         });
         // When multi-level reassembly is done, purge the entire disassembled directory
         let post_purge_final = post_purge || config.is_some();
-        self.reassemble_plain(file_path, file_extension, post_purge_final, base_segment)
+        self.reassemble_plain(&file_path, file_extension, post_purge_final, base_segment)
             .await
     }
 
@@ -128,6 +130,7 @@ impl ReassembleXmlFileHandler {
         post_purge: bool,
         base_segment: Option<(String, String, bool)>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let file_path = normalize_path_unix(file_path);
         log::debug!("Parsing directory to reassemble: {}", file_path);
         let parsed_objects = self
             .process_files_in_directory(file_path.to_string(), base_segment)
@@ -147,7 +150,7 @@ impl ReassembleXmlFileHandler {
         };
 
         // Apply stored key order so reassembled XML matches original document order.
-        let key_order_path = Path::new(file_path).join(".key_order.json");
+        let key_order_path = Path::new(&file_path).join(".key_order.json");
         if key_order_path.exists() {
             if let Ok(bytes) = fs::read(&key_order_path).await {
                 if let Ok(key_order) = serde_json::from_slice::<Vec<String>>(&bytes) {
@@ -159,7 +162,7 @@ impl ReassembleXmlFileHandler {
         }
 
         let final_xml = build_xml_string(&merged);
-        let output_path = self.get_output_path(file_path, file_extension);
+        let output_path = self.get_output_path(&file_path, file_extension);
 
         fs::write(&output_path, final_xml).await?;
 
@@ -198,7 +201,7 @@ impl ReassembleXmlFileHandler {
 
             for entry in entries {
                 let path = entry.path();
-                let file_path = path.to_string_lossy().to_string();
+                let file_path = normalize_path_unix(&path.to_string_lossy()).to_string();
 
                 if path.is_file() {
                     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -249,7 +252,7 @@ impl ReassembleXmlFileHandler {
             if path.is_file() {
                 let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 if !name.starts_with('.') && self.is_parsable_file(name) {
-                    xml_files.push(path.to_string_lossy().to_string());
+                    xml_files.push(normalize_path_unix(&path.to_string_lossy()));
                 }
             }
         }
