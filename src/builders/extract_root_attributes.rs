@@ -69,7 +69,11 @@ mod tests {
         let element = json!({ "xmlns": "http://ns.example.com", "child": {} });
         let attrs = extract_root_attributes(&element);
         assert_eq!(
-            attrs.as_object().unwrap().get("@xmlns").and_then(|v| v.as_str()),
+            attrs
+                .as_object()
+                .unwrap()
+                .get("@xmlns")
+                .and_then(|v| v.as_str()),
             Some("http://ns.example.com")
         );
     }

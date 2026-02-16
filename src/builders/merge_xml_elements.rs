@@ -184,7 +184,11 @@ mod tests {
         });
         let reordered = reorder_root_keys(&el, &["a".into(), "m".into()]).unwrap();
         let root = reordered.get("Root").and_then(|v| v.as_object()).unwrap();
-        let keys: Vec<_> = root.keys().filter(|k| !k.starts_with('@')).cloned().collect();
+        let keys: Vec<_> = root
+            .keys()
+            .filter(|k| !k.starts_with('@'))
+            .cloned()
+            .collect();
         assert_eq!(keys, ["a", "m", "z"]);
     }
 }

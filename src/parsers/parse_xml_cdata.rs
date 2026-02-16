@@ -236,7 +236,10 @@ mod tests {
         let xml = r#"<r><!-- comment -->tail</r>"#;
         let v = parse_xml_with_cdata(xml).unwrap();
         let r = v.get("r").and_then(|r| r.as_object()).unwrap();
-        assert_eq!(r.get("#comment").and_then(|c| c.as_str()), Some(" comment "));
+        assert_eq!(
+            r.get("#comment").and_then(|c| c.as_str()),
+            Some(" comment ")
+        );
         assert_eq!(r.get("#text-tail").and_then(|t| t.as_str()), Some("tail"));
     }
 
@@ -269,8 +272,18 @@ mod tests {
         assert_eq!(parse_text_value("0", true).as_str(), Some("0")); // leading_zero_as_string keeps "0" as string
         assert!(parse_text_value("0", false).as_i64() == Some(0));
         assert_eq!(parse_text_value("01", true).as_str(), Some("01"));
-        assert!(parse_text_value("3.14", true).as_f64().map(|f| (f - 3.14).abs() < 1e-9) == Some(true));
-        assert!(parse_text_value("0.5", false).as_f64().map(|f| (f - 0.5).abs() < 1e-9) == Some(true));
+        assert!(
+            parse_text_value("2.5", true)
+                .as_f64()
+                .map(|f| (f - 2.5).abs() < 1e-9)
+                == Some(true)
+        );
+        assert!(
+            parse_text_value("0.5", false)
+                .as_f64()
+                .map(|f| (f - 0.5).abs() < 1e-9)
+                == Some(true)
+        );
         assert_eq!(parse_text_value("0.5", true).as_str(), Some("0.5")); // leading zero kept as string
         assert!(parse_text_value("true", true).as_bool() == Some(true));
         assert!(parse_text_value("false", true).as_bool() == Some(false));

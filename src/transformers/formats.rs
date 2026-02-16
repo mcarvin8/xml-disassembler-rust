@@ -32,7 +32,13 @@ mod tests {
         let el = json!({ "root": { "a": 1 } });
         let out = transform_to_json(&el).await;
         let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(parsed.get("root").and_then(|r| r.get("a")).and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(
+            parsed
+                .get("root")
+                .and_then(|r| r.get("a"))
+                .and_then(|v| v.as_i64()),
+            Some(1)
+        );
     }
 
     #[tokio::test]
@@ -40,6 +46,12 @@ mod tests {
         let el = json!({ "root": { "a": 1 } });
         let out = transform_to_json5(&el).await;
         let parsed: serde_json::Value = json5::from_str(&out).unwrap();
-        assert_eq!(parsed.get("root").and_then(|r| r.get("a")).and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(
+            parsed
+                .get("root")
+                .and_then(|r| r.get("a"))
+                .and_then(|v| v.as_i64()),
+            Some(1)
+        );
     }
 }
