@@ -77,4 +77,20 @@ mod tests {
             Some("http://ns.example.com")
         );
     }
+
+    #[test]
+    fn attr_value_number_and_bool_converted_to_string() {
+        let element = json!({ "@num": 42, "@flag": true, "child": {} });
+        let attrs = extract_root_attributes(&element);
+        let obj = attrs.as_object().unwrap();
+        assert_eq!(obj.get("@num").and_then(|v| v.as_str()), Some("42"));
+        assert_eq!(obj.get("@flag").and_then(|v| v.as_str()), Some("true"));
+    }
+
+    #[test]
+    fn attr_value_null_converted_to_empty_string() {
+        let element = json!({ "@empty": null, "child": {} });
+        let attrs = extract_root_attributes(&element);
+        assert_eq!(attrs.get("@empty").and_then(|v| v.as_str()), Some(""));
+    }
 }

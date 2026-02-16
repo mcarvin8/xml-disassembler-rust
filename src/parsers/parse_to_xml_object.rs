@@ -98,4 +98,21 @@ mod tests {
         let out = parse_to_xml_object(path.to_str().unwrap()).await;
         assert!(out.is_none());
     }
+
+    #[tokio::test]
+    async fn parse_to_xml_object_xml_with_declaration_and_xmlns() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("meta.xml");
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?><root xmlns="http://example.com"><a>1</a></root>"#;
+        std::fs::write(&path, xml).unwrap();
+        let out = parse_to_xml_object(path.to_str().unwrap()).await;
+        assert!(out.is_some());
+        let obj = out.unwrap();
+        assert!(obj.get("?xml").is_some());
+        let root = obj.get("root").and_then(|r| r.as_object()).unwrap();
+        assert_eq!(
+            root.get("@xmlns").and_then(|v| v.as_str()),
+            Some("http://example.com")
+        );
+    }
 }

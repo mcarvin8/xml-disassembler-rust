@@ -114,4 +114,22 @@ mod tests {
         let xml = r#"<root/>"#;
         assert!(extract_xml_declaration_from_raw(xml).is_none());
     }
+
+    #[test]
+    fn extract_xml_declaration_from_raw_returns_none_when_version_missing() {
+        let xml = r#"<?xml encoding="UTF-8"?><root/>"#;
+        assert!(extract_xml_declaration_from_raw(xml).is_none());
+    }
+
+    #[test]
+    fn parse_xml_from_str_invalid_xml_returns_none() {
+        let result = parse_xml_from_str("<<", "test.xml");
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn parse_xml_missing_file_returns_none() {
+        let result = parse_xml("/nonexistent/path/file.xml").await;
+        assert!(result.is_none());
+    }
 }
