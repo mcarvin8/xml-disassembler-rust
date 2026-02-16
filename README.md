@@ -157,7 +157,12 @@ Each nested element is written to its own file, named by a unique identifier (or
 Best for fine-grained diffs and version control.
 
 - **UID-based layout** – When you provide `--unique-id-elements` (e.g. `name,id,apexClass`), nested elements are named by the first matching field value. For Salesforce flows, a typical list might be: `apexClass,name,object,field,layout,actionName,targetReference,assignToReference,choiceText,promptText`. Using unique ID elements also ensures predictable sorting in the reassembled output.
+
+![UID](https://raw.githubusercontent.com/mcarvin8/xml-disassembler-rust/main/.github/images/uid.png)
+
 - **Hash-based layout** – When no unique ID is found, elements are named with an 8-character hash of their content (e.g. `419e0199.botMlDomain-meta.xml`).
+
+![Hashes](https://raw.githubusercontent.com/mcarvin8/xml-disassembler-rust/main/.github/images/uid-hashes.png)
 
 ### grouped-by-tag
 
@@ -170,6 +175,8 @@ xml-disassembler disassemble ./my.xml --strategy grouped-by-tag --format yaml
 ```
 
 Reassembly preserves element content and structure.
+
+![Grouped by Tag](https://raw.githubusercontent.com/mcarvin8/xml-disassembler-rust/main/.github/images/grouped-by-tag.png)
 
 #### Split tags (`-p` / `--split-tags`)
 
@@ -185,6 +192,8 @@ xml-disassembler disassemble fixtures/split-tags/HR_Admin.permissionset-meta.xml
 ```
 
 Creates `HR_Admin/` with e.g. `objectPermissions/Job_Request__c.objectPermissions-meta.xml`, `objectPermissions/Account.objectPermissions-meta.xml`, `fieldPermissions/<fieldValue>.fieldPermissions-meta.xml`, plus the main `HR_Admin.permissionset-meta.xml` with the rest. Reassembly requires no changes: the existing reassemble command merges subdirs and files back into one XML.
+
+![Split Tag](https://raw.githubusercontent.com/mcarvin8/xml-disassembler-rust/main/.github/images/split-tags.png)
 
 ### Multi-level disassembly
 
@@ -209,6 +218,8 @@ xml-disassembler disassemble ./Cloud_Kicks_Inner_Circle.loyaltyProgramSetup-meta
 A `.multi_level.json` config is written in the disassembly root so **reassemble** automatically does inner-level reassembly first, wraps files with the original root, then reassembles the top level. No extra flags are needed for reassembly.
 
 **Caveat:** Multi-level reassembly removes disassembled directories after reassembling each level, even when you do not pass `--postpurge`. This is required so the next level can merge the reassembled XML files. Use version control (e.g. Git) to recover the tree if needed, or run reassembly only in a pipeline where these changes can be discarded.
+
+![Multi-Level](https://raw.githubusercontent.com/mcarvin8/xml-disassembler-rust/main/.github/images/multi-level.png)
 
 ## Ignore file
 
