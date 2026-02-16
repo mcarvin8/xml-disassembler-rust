@@ -88,4 +88,20 @@ mod tests {
         let result = strip_whitespace_text_nodes(&input);
         assert_eq!(result, json!("hello"));
     }
+
+    #[test]
+    fn preserves_empty_text_when_element_has_cdata() {
+        let input = json!({ "#cdata": "content", "#text": "   " });
+        let result = strip_whitespace_text_nodes(&input);
+        let obj = result.as_object().unwrap();
+        assert_eq!(obj.get("#cdata").and_then(|v| v.as_str()), Some("content"));
+        assert_eq!(obj.get("#text").and_then(|v| v.as_str()), Some("   "));
+    }
+
+    #[test]
+    fn preserves_null_special_keys() {
+        let input = json!({ "#text": null });
+        let result = strip_whitespace_text_nodes(&input);
+        assert!(result.get("#text").map(|v| v.is_null()) == Some(true));
+    }
 }

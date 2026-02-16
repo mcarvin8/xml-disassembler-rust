@@ -191,4 +191,28 @@ mod tests {
             .collect();
         assert_eq!(keys, ["a", "m", "z"]);
     }
+
+    #[test]
+    fn merge_elements_without_declaration_uses_default() {
+        let a = json!({ "Root": { "a": "1" } });
+        let b = json!({ "Root": { "b": "2" } });
+        let merged = merge_xml_elements(&[a, b]).unwrap();
+        assert!(merged.get("?xml").is_some());
+        let root = merged.get("Root").and_then(|v| v.as_object()).unwrap();
+        assert_eq!(root.get("a").and_then(|v| v.as_str()), Some("1"));
+        assert_eq!(root.get("b").and_then(|v| v.as_str()), Some("2"));
+    }
+
+    #[test]
+    fn merge_array_value_coalesces_into_array() {
+        let a = json!({ "Root": { "item": { "x": "1" } } });
+        let b = json!({ "Root": { "item": { "x": "2" } } });
+        let merged = merge_xml_elements(&[a, b]).unwrap();
+        let items = merged
+            .get("Root")
+            .and_then(|r| r.get("item"))
+            .and_then(|i| i.as_array())
+            .unwrap();
+        assert_eq!(items.len(), 2);
+    }
 }

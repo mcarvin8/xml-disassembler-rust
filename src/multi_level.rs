@@ -290,4 +290,10 @@ mod tests {
         assert_eq!(loaded.rules.len(), 1);
         assert_eq!(loaded.rules[0].path_segment, "test");
     }
+
+    #[tokio::test]
+    async fn load_multi_level_config_missing_file_returns_none() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(load_multi_level_config(dir.path()).await.is_none());
+    }
 }

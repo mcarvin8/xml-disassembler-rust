@@ -354,4 +354,20 @@ mod tests {
         assert!(out.contains("<![CDATA["));
         assert!(out.contains("only cdata content"));
     }
+
+    #[test]
+    fn build_xml_string_declaration_only_defaults_root_key() {
+        let el = json!({ "?xml": { "@version": "1.0", "@encoding": "UTF-8" } });
+        let out = build_xml_string(&el);
+        assert!(out.contains("<?xml"));
+        assert!(out.contains("<root>"));
+    }
+
+    #[test]
+    fn build_xml_string_declaration_non_object_skips_decl_write() {
+        let el = json!({ "?xml": "not-an-object", "root": { "a": "b" } });
+        let out = build_xml_string(&el);
+        assert!(!out.contains("<?xml"));
+        assert!(out.contains("<root>"));
+    }
 }

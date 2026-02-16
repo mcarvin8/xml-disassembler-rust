@@ -265,6 +265,47 @@ mod tests {
     }
 
     #[test]
+    fn parse_xml_with_cdata_appends_multiple_cdata_sections() {
+        let xml = r#"<r><x><![CDATA[a]]><![CDATA[b]]></x></r>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let x = v
+            .get("r")
+            .and_then(|r| r.get("x"))
+            .and_then(|x| x.as_object())
+            .unwrap();
+        assert_eq!(x.get("#cdata").and_then(|c| c.as_str()), Some("ab"));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_invalid_returns_err() {
+        let result = parse_xml_with_cdata("<<");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_duplicate_sibling_elements_become_array() {
+        let xml = r#"<r><item>a</item><item>b</item></r>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let r = v.get("r").and_then(|r| r.as_object()).unwrap();
+        let items = r.get("item").and_then(|i| i.as_array()).unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].get("#text").and_then(|t| t.as_str()), Some("a"));
+        assert_eq!(items[1].get("#text").and_then(|t| t.as_str()), Some("b"));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_empty_element_with_attributes() {
+        let xml = r#"<r><empty id="x"/></r>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let empty = v
+            .get("r")
+            .and_then(|r| r.get("empty"))
+            .and_then(|e| e.as_object())
+            .unwrap();
+        assert_eq!(empty.get("@id").and_then(|v| v.as_str()), Some("x"));
+    }
+
+    #[test]
     fn parse_text_value_number_bool_and_leading_zero() {
         assert!(parse_text_value("", true).as_str().map(|s| s.is_empty()) == Some(true));
         assert!(parse_text_value("42", false).as_i64() == Some(42));

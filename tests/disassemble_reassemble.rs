@@ -54,6 +54,47 @@ async fn disassemble_with_unsupported_strategy_defaults_to_unique_id() {
 }
 
 #[tokio::test]
+async fn disassemble_directory_with_ignore_skips_matching_files() {
+    let _ = env_logger::try_init();
+    let fixture = "fixtures/general/HR_Admin.permissionset-meta.xml";
+    assert!(
+        Path::new(fixture).exists(),
+        "Fixture must exist (run from project root)"
+    );
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let dir_path = base.join("meta");
+    std::fs::create_dir_all(&dir_path).expect("create dir");
+    std::fs::copy(fixture, dir_path.join("A.permissionset-meta.xml")).expect("copy");
+    std::fs::copy(fixture, dir_path.join("B.permissionset-meta.xml")).expect("copy");
+    std::fs::write(
+        base.join(".xmldisassemblerignore"),
+        "B.permissionset-meta.xml",
+    )
+    .expect("write ignore");
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            dir_path.to_str().unwrap(),
+            None,
+            Some("unique-id"),
+            false,
+            false,
+            base.join(".xmldisassemblerignore").to_str().unwrap(),
+            "xml",
+            None,
+            None,
+        )
+        .await
+        .expect("disassemble");
+    assert!(dir_path.join("A").exists(), "A should be disassembled");
+    assert!(
+        !dir_path.join("B").exists(),
+        "B should be ignored by .xmldisassemblerignore"
+    );
+}
+
+#[tokio::test]
 async fn disassemble_directory_processes_xml_files() {
     let _ = env_logger::try_init();
     let fixture = "fixtures/general/HR_Admin.permissionset-meta.xml";
@@ -125,6 +166,32 @@ async fn reassemble_with_post_purge_removes_disassembled_dir() {
     assert!(
         !disassembled_dir.exists(),
         "post_purge should remove disassembled directory"
+    );
+}
+
+#[tokio::test]
+async fn reassemble_applies_key_order_from_dot_key_order_json() {
+    let _ = env_logger::try_init();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let disassembled_dir = base.join("Out");
+    std::fs::create_dir_all(&disassembled_dir).expect("create dir");
+    let part_xml =
+        r#"<?xml version="1.0"?><Root><firstKey>1</firstKey><secondKey>2</secondKey></Root>"#;
+    std::fs::write(disassembled_dir.join("Out.xml"), part_xml).expect("write part");
+    let key_order = serde_json::to_string(&["secondKey", "firstKey"]).unwrap();
+    std::fs::write(disassembled_dir.join(".key_order.json"), key_order).expect("write key_order");
+    let handler = ReassembleXmlFileHandler::new();
+    handler
+        .reassemble(disassembled_dir.to_str().unwrap(), Some("xml"), false)
+        .await
+        .expect("reassemble");
+    let out = std::fs::read_to_string(base.join("Out.xml")).expect("read output");
+    let second_pos = out.find("<secondKey>").unwrap_or(0);
+    let first_pos = out.find("<firstKey>").unwrap_or(0);
+    assert!(
+        second_pos < first_pos,
+        "key_order should reorder: secondKey before firstKey"
     );
 }
 
@@ -699,4 +766,119 @@ async fn split_tags_disassemble_then_reassemble_matches_original() {
         original_content, reassembled_content,
         "Reassembled XML must match original (split-tags round-trip)"
     );
+}
+
+/// Full round-trip (disassemble → reassemble) for each success fixture.
+/// Excludes: no-root-element (invalid root), no-nested-elements (only leaves), ignore (behavior);
+/// attributes/notes.xml (reassembly differs re declaration/entities), array-of-leaves (sibling order not preserved).
+#[tokio::test]
+async fn fixture_round_trip_matches_original() {
+    let _ = env_logger::try_init();
+
+    /// (fixture path, optional unique_id_elements for disassemble, extension for reassemble output)
+    const FIXTURES: &[(&str, Option<&str>, &str)] = &[
+        ("fixtures/general/HR_Admin.permissionset-meta.xml", None, "xml"),
+        (
+            "fixtures/comments/Numbers-fr.globalValueSetTranslation-meta.xml",
+            None,
+            "globalValueSetTranslation-meta.xml",
+        ),
+        (
+            "fixtures/cdata/VidLand_US.marketingappextension-meta.xml",
+            None,
+            "marketingappextension-meta.xml",
+        ),
+        (
+            "fixtures/no-namespace/HR_Admin.permissionset-meta.xml",
+            None,
+            "xml",
+        ),
+        // attributes/notes.xml excluded: reassembly differs (no XML declaration, entity encoding)
+        // array-of-leaves excluded: sibling order not preserved on reassembly
+        (
+            "fixtures/deeply-nested-unique-id-element/Get_Info.flow-meta.xml",
+            Some("apexClass,name,object,field,layout,actionName,targetReference,assignToReference,choiceText,promptText"),
+            "flow-meta.xml",
+        ),
+    ];
+
+    for (fixture, unique_id_elements, reassemble_ext) in FIXTURES {
+        let path = Path::new(fixture);
+        assert!(
+            path.exists(),
+            "Fixture {} must exist (run from project root)",
+            fixture
+        );
+
+        let original_content = std::fs::read_to_string(fixture).expect("read original fixture");
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let base = temp_dir.path();
+        let file_name = path.file_name().unwrap().to_str().unwrap();
+        let base_name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(|s| s.split('.').next().unwrap_or(s))
+            .unwrap_or("out");
+        let disassembled_dir = base.join(base_name);
+
+        let source_in_temp = base.join(file_name);
+        std::fs::copy(fixture, &source_in_temp).expect("copy fixture to temp");
+
+        let mut disassemble = DisassembleXmlFileHandler::new();
+        let result = disassemble
+            .disassemble(
+                source_in_temp.to_str().unwrap(),
+                *unique_id_elements,
+                Some("unique-id"),
+                false,
+                false,
+                ".xmldisassemblerignore",
+                "xml",
+                None,
+                None,
+            )
+            .await;
+
+        let Ok(()) = result else {
+            panic!(
+                "disassemble failed for fixture {}: {:?}",
+                fixture,
+                result.unwrap_err()
+            );
+        };
+
+        assert!(
+            disassembled_dir.exists(),
+            "Disassembled directory should exist for {}",
+            fixture
+        );
+
+        let reassemble_handler = ReassembleXmlFileHandler::new();
+        reassemble_handler
+            .reassemble(
+                disassembled_dir.to_str().unwrap(),
+                Some(reassemble_ext),
+                false,
+            )
+            .await
+            .expect("reassemble");
+
+        let reassembled_path = base.join(format!("{}.{}", base_name, reassemble_ext));
+        assert!(
+            reassembled_path.exists(),
+            "Reassembled file should exist for {} at {:?}",
+            fixture,
+            reassembled_path
+        );
+
+        let reassembled_content =
+            std::fs::read_to_string(&reassembled_path).expect("read reassembled");
+
+        assert_eq!(
+            original_content, reassembled_content,
+            "Round-trip for fixture {}: reassembled XML must match original",
+            fixture
+        );
+    }
 }
