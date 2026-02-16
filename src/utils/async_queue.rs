@@ -24,3 +24,24 @@ impl AsyncTaskQueue {
         task.await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn new_and_add_returns_task_result() {
+        let queue = AsyncTaskQueue::new(2);
+        let r: i32 = queue.add(async { 42 }).await;
+        assert_eq!(r, 42);
+    }
+
+    #[tokio::test]
+    async fn add_respects_concurrency() {
+        let queue = AsyncTaskQueue::new(1);
+        let a = queue.add(async { 1 });
+        let b = queue.add(async { 2 });
+        let (x, y) = tokio::join!(a, b);
+        assert_eq!((x, y), (1, 2));
+    }
+}

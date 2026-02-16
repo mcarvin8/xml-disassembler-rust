@@ -237,3 +237,121 @@ pub fn build_xml_string(element: &XmlElement) -> String {
         _ => String::new(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn build_xml_string_non_object_returns_empty() {
+        assert!(build_xml_string(&Value::Array(vec![])).is_empty());
+        assert!(build_xml_string(&Value::Null).is_empty());
+    }
+
+    #[test]
+    fn build_xml_string_simple_root() {
+        let el = json!({
+            "?xml": { "@version": "1.0", "@encoding": "UTF-8" },
+            "root": { "child": "value" }
+        });
+        let out = build_xml_string(&el);
+        assert!(out.contains("<?xml"));
+        assert!(out.contains("<root>"));
+        assert!(out.contains("<child>value</child>"));
+        assert!(out.contains("</root>"));
+    }
+
+    #[test]
+    fn build_xml_string_with_attributes() {
+        let el = json!({
+            "root": { "@xmlns": "http://example.com", "a": "b" }
+        });
+        let out = build_xml_string(&el);
+        assert!(out.contains("xmlns"));
+        assert!(out.contains("http://example.com"));
+        assert!(out.contains("<a>b</a>"));
+    }
+
+    #[test]
+    fn build_xml_string_with_array() {
+        let el = json!({
+            "root": { "item": [ { "x": "1" }, { "x": "2" } ] }
+        });
+        let out = build_xml_string(&el);
+        assert!(out.contains("<item>"));
+        assert!(out.contains("<x>1</x>"));
+        assert!(out.contains("<x>2</x>"));
+    }
+
+    #[test]
+    fn build_xml_string_without_declaration() {
+        let el = json!({ "root": { "a": "b" } });
+        let out = build_xml_string(&el);
+        assert!(!out.contains("<?xml"));
+        assert!(out.contains("<root>"));
+    }
+
+    #[test]
+    fn build_xml_string_with_text_comment_cdata() {
+        let root = json!({
+            "#text": "text",
+            "#comment": " a comment ",
+            "#cdata": "<cdata>"
+        });
+        let el = json!({
+            "?xml": { "@version": "1.0" },
+            "root": root
+        });
+        let out = build_xml_string(&el);
+        assert!(out.contains("text"));
+        assert!(out.contains("<!--"));
+        assert!(out.contains(" a comment "));
+        assert!(out.contains("<![CDATA["));
+        assert!(out.contains("<cdata>"));
+    }
+
+    #[test]
+    fn build_xml_string_with_declaration_encoding_standalone() {
+        let el = json!({
+            "?xml": { "@version": "1.0", "@encoding": "UTF-8", "@standalone": "yes" },
+            "root": { "a": "b" }
+        });
+        let out = build_xml_string(&el);
+        assert!(out.contains("<?xml"));
+        assert!(out.contains("UTF-8"));
+        assert!(out.contains("standalone"));
+        assert!(out.contains("<root>"));
+    }
+
+    #[test]
+    fn build_xml_string_primitive_sibling_children() {
+        // Root with multiple children: one object, one primitive (hits _ => branch)
+        let el = json!({
+            "root": { "obj": { "x": "1" }, "num": 42, "flag": true }
+        });
+        let out = build_xml_string(&el);
+        assert!(out.contains("<obj>"));
+        assert!(out.contains("<num>42</num>"));
+        assert!(out.contains("<flag>true</flag>"));
+    }
+
+    #[test]
+    fn build_xml_string_null_child_value() {
+        let el = json!({
+            "root": { "empty": null }
+        });
+        let out = build_xml_string(&el);
+        assert!(out.contains("<empty>"));
+        assert!(out.contains("</empty>"));
+    }
+
+    #[test]
+    fn build_xml_string_cdata_only_no_text_or_comment() {
+        let root = json!({ "#cdata": "only cdata content" });
+        let el = json!({ "?xml": { "@version": "1.0" }, "root": root });
+        let out = build_xml_string(&el);
+        assert!(out.contains("<![CDATA["));
+        assert!(out.contains("only cdata content"));
+    }
+}

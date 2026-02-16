@@ -175,3 +175,105 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
         Ok(Value::Object(Map::new()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_xml_with_cdata_simple_element() {
+        let xml = r#"<root><a>hello</a></root>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let root = v.get("root").and_then(|r| r.as_object()).unwrap();
+        let a = root.get("a").and_then(|a| a.as_object()).unwrap();
+        assert_eq!(a.get("#text").and_then(|t| t.as_str()), Some("hello"));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_preserves_cdata() {
+        let xml = r#"<root><x><![CDATA[<escaped>]]></x></root>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let root = v.get("root").and_then(|r| r.as_object()).unwrap();
+        let x = root.get("x").and_then(|x| x.as_object()).unwrap();
+        assert_eq!(x.get("#cdata").and_then(|c| c.as_str()), Some("<escaped>"));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_empty_element() {
+        let xml = r#"<root><empty/></root>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let root = v.get("root").and_then(|r| r.as_object()).unwrap();
+        assert!(root.get("empty").is_some());
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_comment() {
+        let xml = r#"<root><!-- comment --><a>1</a></root>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let root = v.get("root").and_then(|r| r.as_object()).unwrap();
+        assert!(root.get("#comment").or(root.get("a")).is_some());
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_attributes() {
+        let xml = r#"<root id="x"><a>1</a></root>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let root = v.get("root").and_then(|r| r.as_object()).unwrap();
+        assert_eq!(root.get("@id").and_then(|v| v.as_str()), Some("x"));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_multiple_children() {
+        let xml = r#"<r><n>42</n><b>true</b></r>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let r = v.get("r").and_then(|r| r.as_object()).unwrap();
+        assert!(r.get("n").is_some());
+        assert!(r.get("b").is_some());
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_text_tail_after_comment() {
+        let xml = r#"<r><!-- comment -->tail</r>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let r = v.get("r").and_then(|r| r.as_object()).unwrap();
+        assert_eq!(r.get("#comment").and_then(|c| c.as_str()), Some(" comment "));
+        assert_eq!(r.get("#text-tail").and_then(|t| t.as_str()), Some("tail"));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_empty_root_returns_empty_object() {
+        let xml = r#"<root></root>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let root = v.get("root").and_then(|r| r.as_object()).unwrap();
+        assert!(root.is_empty());
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_mixed_content_appends_text() {
+        // Two text nodes in same element (e.g. <a>hello</a><b/> then text "world" in same parent)
+        let xml = r#"<r><a>hello<x/>world</a></r>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let r = v.get("r").and_then(|r| r.as_object()).unwrap();
+        let a = r.get("a").and_then(|a| a.as_object()).unwrap();
+        // First text "hello", then after <x/>, text "world" appends to #text
+        assert!(a.get("#text").is_some());
+        let t = a.get("#text").and_then(|t| t.as_str()).unwrap();
+        assert!(t.contains("hello") && t.contains("world"));
+    }
+
+    #[test]
+    fn parse_text_value_number_bool_and_leading_zero() {
+        assert!(parse_text_value("", true).as_str().map(|s| s.is_empty()) == Some(true));
+        assert!(parse_text_value("42", false).as_i64() == Some(42));
+        assert!(parse_text_value("42", true).as_i64() == Some(42));
+        assert_eq!(parse_text_value("0", true).as_str(), Some("0")); // leading_zero_as_string keeps "0" as string
+        assert!(parse_text_value("0", false).as_i64() == Some(0));
+        assert_eq!(parse_text_value("01", true).as_str(), Some("01"));
+        assert!(parse_text_value("3.14", true).as_f64().map(|f| (f - 3.14).abs() < 1e-9) == Some(true));
+        assert!(parse_text_value("0.5", false).as_f64().map(|f| (f - 0.5).abs() < 1e-9) == Some(true));
+        assert_eq!(parse_text_value("0.5", true).as_str(), Some("0.5")); // leading zero kept as string
+        assert!(parse_text_value("true", true).as_bool() == Some(true));
+        assert!(parse_text_value("false", true).as_bool() == Some(false));
+        assert_eq!(parse_text_value("hello", true).as_str(), Some("hello"));
+    }
+}

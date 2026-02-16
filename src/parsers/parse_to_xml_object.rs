@@ -47,3 +47,55 @@ pub async fn parse_to_xml_object(file_path: &str) -> Option<XmlElement> {
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn parse_to_xml_object_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        std::fs::write(&path, r#"{"root":{"a":1}}"#).unwrap();
+        let out = parse_to_xml_object(path.to_str().unwrap()).await;
+        assert!(out.is_some());
+        let obj = out.unwrap();
+        assert!(obj.get("root").is_some());
+    }
+
+    #[tokio::test]
+    async fn parse_to_xml_object_yaml() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.yaml");
+        std::fs::write(&path, "root:\n  a: 1\n").unwrap();
+        let out = parse_to_xml_object(path.to_str().unwrap()).await;
+        assert!(out.is_some());
+    }
+
+    #[tokio::test]
+    async fn parse_to_xml_object_yml_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.yml");
+        std::fs::write(&path, "root: {}").unwrap();
+        let out = parse_to_xml_object(path.to_str().unwrap()).await;
+        assert!(out.is_some());
+    }
+
+    #[tokio::test]
+    async fn parse_to_xml_object_json5() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.json5");
+        std::fs::write(&path, "{ root: { a: 1 } }").unwrap();
+        let out = parse_to_xml_object(path.to_str().unwrap()).await;
+        assert!(out.is_some());
+    }
+
+    #[tokio::test]
+    async fn parse_to_xml_object_unsupported_returns_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.txt");
+        std::fs::write(&path, "not xml").unwrap();
+        let out = parse_to_xml_object(path.to_str().unwrap()).await;
+        assert!(out.is_none());
+    }
+}

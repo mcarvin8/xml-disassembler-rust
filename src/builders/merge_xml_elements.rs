@@ -175,4 +175,16 @@ mod tests {
             Some("second")
         );
     }
+
+    #[test]
+    fn reorder_root_keys_reorders_and_appends_extra() {
+        let el = json!({
+            "?xml": { "@version": "1.0" },
+            "Root": { "z": "last", "a": "first", "m": "mid" }
+        });
+        let reordered = reorder_root_keys(&el, &["a".into(), "m".into()]).unwrap();
+        let root = reordered.get("Root").and_then(|v| v.as_object()).unwrap();
+        let keys: Vec<_> = root.keys().filter(|k| !k.starts_with('@')).cloned().collect();
+        assert_eq!(keys, ["a", "m", "z"]);
+    }
 }

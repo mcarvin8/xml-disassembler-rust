@@ -210,6 +210,7 @@ pub async fn ensure_segment_files_structure(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn path_segment_from_file_pattern_strips_suffix() {
@@ -222,5 +223,71 @@ mod tests {
     #[test]
     fn path_segment_from_file_pattern_no_dash() {
         assert_eq!(path_segment_from_file_pattern("foo"), "foo");
+    }
+
+    #[test]
+    fn strip_root_and_build_xml_strips_child_not_root() {
+        let parsed = json!({
+            "?xml": { "@version": "1.0" },
+            "Root": {
+                "programProcesses": { "a": "1", "b": "2" },
+                "label": "x"
+            }
+        });
+        let out = strip_root_and_build_xml(&parsed, "programProcesses").unwrap();
+        assert!(out.contains("<Root>"));
+        assert!(out.contains("<a>1</a>"));
+        assert!(out.contains("<b>2</b>"));
+        assert!(out.contains("<label>x</label>"));
+    }
+
+    #[test]
+    fn strip_root_and_build_xml_strips_root_excludes_attributes() {
+        let parsed = json!({
+            "?xml": { "@version": "1.0" },
+            "LoyaltyProgramSetup": {
+                "@xmlns": "http://example.com",
+                "programProcesses": { "x": "1" }
+            }
+        });
+        let out = strip_root_and_build_xml(&parsed, "LoyaltyProgramSetup").unwrap();
+        assert!(!out.contains("@xmlns"));
+        assert!(out.contains("programProcesses"));
+    }
+
+    #[test]
+    fn capture_xmlns_from_root_returns_some() {
+        let parsed = json!({
+            "Root": { "@xmlns": "http://ns.example.com" }
+        });
+        assert_eq!(
+            capture_xmlns_from_root(&parsed),
+            Some("http://ns.example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn capture_xmlns_from_root_returns_none_when_absent() {
+        let parsed = json!({ "Root": { "child": "x" } });
+        assert!(capture_xmlns_from_root(&parsed).is_none());
+    }
+
+    #[tokio::test]
+    async fn save_and_load_multi_level_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = MultiLevelConfig {
+            rules: vec![crate::types::MultiLevelRule {
+                file_pattern: "test-meta".to_string(),
+                root_to_strip: "Root".to_string(),
+                unique_id_elements: "id".to_string(),
+                path_segment: "test".to_string(),
+                wrap_root_element: "Root".to_string(),
+                wrap_xmlns: "http://example.com".to_string(),
+            }],
+        };
+        save_multi_level_config(dir.path(), &config).await.unwrap();
+        let loaded = load_multi_level_config(dir.path()).await.unwrap();
+        assert_eq!(loaded.rules.len(), 1);
+        assert_eq!(loaded.rules[0].path_segment, "test");
     }
 }

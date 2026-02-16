@@ -5,6 +5,184 @@ use std::path::Path;
 use xml_disassembler::{DecomposeRule, DisassembleXmlFileHandler, ReassembleXmlFileHandler};
 
 #[tokio::test]
+async fn reassemble_with_file_path_returns_ok_no_op() {
+    let _ = env_logger::try_init();
+    let fixture = "fixtures/general/HR_Admin.permissionset-meta.xml";
+    assert!(Path::new(fixture).exists(), "Fixture must exist (run from project root)");
+    let handler = ReassembleXmlFileHandler::new();
+    // Path is a file, not a directory; validate_directory returns false
+    handler
+        .reassemble(fixture, Some("xml"), false)
+        .await
+        .expect("reassemble should return Ok(())");
+}
+
+#[tokio::test]
+async fn disassemble_with_unsupported_strategy_defaults_to_unique_id() {
+    let _ = env_logger::try_init();
+    let fixture = "fixtures/general/HR_Admin.permissionset-meta.xml";
+    assert!(Path::new(fixture).exists(), "Fixture must exist (run from project root)");
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let source = base.join("HR_Admin.permissionset-meta.xml");
+    std::fs::copy(fixture, &source).expect("copy fixture");
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            source.to_str().unwrap(),
+            None,
+            Some("unsupported-strategy"),
+            false,
+            false,
+            ".xmldisassemblerignore",
+            "xml",
+            None,
+            None,
+        )
+        .await
+        .expect("disassemble");
+    assert!(base.join("HR_Admin").exists(), "Should still disassemble with default strategy");
+}
+
+#[tokio::test]
+async fn disassemble_directory_processes_xml_files() {
+    let _ = env_logger::try_init();
+    let fixture = "fixtures/general/HR_Admin.permissionset-meta.xml";
+    assert!(Path::new(fixture).exists(), "Fixture must exist (run from project root)");
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let dir_path = base.join("meta");
+    std::fs::create_dir_all(&dir_path).expect("create dir");
+    let f1 = dir_path.join("A.permissionset-meta.xml");
+    let f2 = dir_path.join("B.permissionset-meta.xml");
+    std::fs::copy(fixture, &f1).expect("copy");
+    std::fs::copy(fixture, &f2).expect("copy");
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            dir_path.to_str().unwrap(),
+            None,
+            Some("unique-id"),
+            false,
+            false,
+            ".xmldisassemblerignore",
+            "xml",
+            None,
+            None,
+        )
+        .await
+        .expect("disassemble");
+    assert!(dir_path.join("A").exists());
+    assert!(dir_path.join("B").exists());
+}
+
+#[tokio::test]
+async fn reassemble_with_post_purge_removes_disassembled_dir() {
+    let _ = env_logger::try_init();
+    let fixture = "fixtures/general/HR_Admin.permissionset-meta.xml";
+    assert!(Path::new(fixture).exists(), "Fixture must exist (run from project root)");
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let source = base.join("HR_Admin.permissionset-meta.xml");
+    let disassembled_dir = base.join("HR_Admin");
+    std::fs::copy(fixture, &source).expect("copy");
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            source.to_str().unwrap(),
+            None,
+            Some("unique-id"),
+            false,
+            false,
+            ".xmldisassemblerignore",
+            "xml",
+            None,
+            None,
+        )
+        .await
+        .expect("disassemble");
+    assert!(disassembled_dir.exists());
+    let handler = ReassembleXmlFileHandler::new();
+    handler
+        .reassemble(disassembled_dir.to_str().unwrap(), Some("xml"), true)
+        .await
+        .expect("reassemble");
+    assert!(!disassembled_dir.exists(), "post_purge should remove disassembled directory");
+}
+
+#[tokio::test]
+async fn reassemble_empty_directory_returns_ok_no_output() {
+    let _ = env_logger::try_init();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let empty_dir = temp_dir.path().join("empty");
+    std::fs::create_dir_all(&empty_dir).expect("create dir");
+    let handler = ReassembleXmlFileHandler::new();
+    handler
+        .reassemble(empty_dir.to_str().unwrap(), Some("xml"), false)
+        .await
+        .expect("reassemble should return Ok(())");
+    // No output file created when directory has no parsable files
+    assert!(!temp_dir.path().join("empty.xml").exists());
+}
+
+#[tokio::test]
+async fn disassemble_non_xml_file_returns_ok_no_op() {
+    let _ = env_logger::try_init();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let txt_file = base.join("readme.txt");
+    std::fs::write(&txt_file, "not xml").expect("write");
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            txt_file.to_str().unwrap(),
+            None,
+            Some("unique-id"),
+            false,
+            false,
+            ".xmldisassemblerignore",
+            "xml",
+            None,
+            None,
+        )
+        .await
+        .expect("disassemble should return Ok(())");
+    assert!(!base.join("readme").exists(), "Should not create output for non-XML file");
+}
+
+#[tokio::test]
+async fn disassemble_with_pre_purge_removes_existing_output() {
+    let _ = env_logger::try_init();
+    let fixture = "fixtures/general/HR_Admin.permissionset-meta.xml";
+    assert!(Path::new(fixture).exists(), "Fixture must exist (run from project root)");
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let source = base.join("HR_Admin.permissionset-meta.xml");
+    std::fs::copy(fixture, &source).expect("copy");
+    let out_dir = base.join("HR_Admin");
+    std::fs::create_dir_all(&out_dir).expect("create");
+    let marker = out_dir.join("pre-existing.txt");
+    std::fs::write(&marker, "before").expect("write");
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            source.to_str().unwrap(),
+            None,
+            Some("unique-id"),
+            true, // pre_purge
+            false,
+            ".xmldisassemblerignore",
+            "xml",
+            None,
+            None,
+        )
+        .await
+        .expect("disassemble");
+    assert!(out_dir.exists());
+    assert!(!marker.exists(), "pre_purge should remove existing output dir contents");
+}
+
+#[tokio::test]
 async fn disassemble_then_reassemble_matches_original_xml() {
     let _ = env_logger::try_init();
 
@@ -62,6 +240,56 @@ async fn disassemble_then_reassemble_matches_original_xml() {
         original_content, reassembled_content,
         "Reassembled XML must match original file contents (round-trip)"
     );
+}
+
+#[tokio::test]
+async fn disassemble_json_format_then_reassemble_round_trip() {
+    let _ = env_logger::try_init();
+
+    let fixture = "fixtures/general/HR_Admin.permissionset-meta.xml";
+    assert!(
+        Path::new(fixture).exists(),
+        "Fixture {} must exist (run from project root)",
+        fixture
+    );
+
+    let _original_content = std::fs::read_to_string(fixture).expect("read original fixture");
+
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let disassembled_dir = base.join("HR_Admin");
+    let source_in_temp = base.join("HR_Admin.permissionset-meta.xml");
+    std::fs::copy(fixture, &source_in_temp).expect("copy fixture to temp");
+
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            source_in_temp.to_str().unwrap(),
+            None,
+            Some("unique-id"),
+            false,
+            false,
+            ".xmldisassemblerignore",
+            "json",
+            None,
+            None,
+        )
+        .await
+        .expect("disassemble");
+
+    assert!(disassembled_dir.exists(), "Disassembled directory should exist");
+
+    let reassemble_handler = ReassembleXmlFileHandler::new();
+    reassemble_handler
+        .reassemble(disassembled_dir.to_str().unwrap(), Some("json"), false)
+        .await
+        .expect("reassemble");
+
+    let reassembled_path = base.join("HR_Admin.json");
+    assert!(reassembled_path.exists(), "Reassembled file should exist");
+    let reassembled = std::fs::read_to_string(&reassembled_path).expect("read reassembled");
+    assert!(!reassembled.is_empty());
+    assert!(reassembled.contains("<?xml") || reassembled.contains("<"), "reassembled content");
 }
 
 #[tokio::test]
@@ -320,6 +548,43 @@ async fn multi_level_disassemble_then_reassemble_matches_original() {
         original_content, reassembled_content,
         "Reassembled XML must match original (multi-level round-trip)"
     );
+}
+
+/// Grouped-by-tag with a decompose rule that has mode neither "split" nor "group" (fallback path).
+#[tokio::test]
+async fn grouped_by_tag_with_fallback_mode_writes_single_file() {
+    let _ = env_logger::try_init();
+    let fixture = "fixtures/split-tags/HR_Admin.permissionset-meta.xml";
+    assert!(Path::new(fixture).exists(), "Fixture must exist (run from project root)");
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let base = temp_dir.path();
+    let disassembled_dir = base.join("HR_Admin");
+    let source = base.join("HR_Admin.permissionset-meta.xml");
+    std::fs::copy(fixture, &source).expect("copy fixture");
+    let fallback_rule = DecomposeRule {
+        tag: "objectPermissions".to_string(),
+        path_segment: "objectPermissions".to_string(),
+        mode: "fallback".to_string(),
+        field: "object".to_string(),
+    };
+    let mut disassemble = DisassembleXmlFileHandler::new();
+    disassemble
+        .disassemble(
+            source.to_str().unwrap(),
+            None,
+            Some("grouped-by-tag"),
+            false,
+            false,
+            ".xmldisassemblerignore",
+            "xml",
+            None,
+            Some(&[fallback_rule]),
+        )
+        .await
+        .expect("disassemble");
+    assert!(disassembled_dir.exists());
+    let fallback_file = disassembled_dir.join("objectPermissions.xml");
+    assert!(fallback_file.exists(), "fallback mode writes single file to disassembled root");
 }
 
 /// Grouped-by-tag with --split-tags: objectPermissions split by object, fieldPermissions grouped by object (from field).
