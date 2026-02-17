@@ -215,4 +215,20 @@ mod tests {
             .unwrap();
         assert_eq!(items.len(), 2);
     }
+
+    #[test]
+    fn merge_array_value_when_target_has_key_non_array_coalesces_into_array() {
+        // First element has "item" as object; second has "item" as array → coalesce to [existing, ...new]
+        let a = json!({ "Root": { "item": { "x": "1" } } });
+        let b = json!({ "Root": { "item": [ { "x": "2" } ] } });
+        let merged = merge_xml_elements(&[a, b]).unwrap();
+        let items = merged
+            .get("Root")
+            .and_then(|r| r.get("item"))
+            .and_then(|i| i.as_array())
+            .unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].get("x").and_then(|v| v.as_str()), Some("1"));
+        assert_eq!(items[1].get("x").and_then(|v| v.as_str()), Some("2"));
+    }
 }

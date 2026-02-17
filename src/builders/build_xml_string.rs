@@ -370,4 +370,36 @@ mod tests {
         assert!(!out.contains("<?xml"));
         assert!(out.contains("<root>"));
     }
+
+    #[test]
+    fn build_xml_string_root_value_array_sibling_elements() {
+        // Root value is Array (write_element Value::Array branch)
+        let el = json!({
+            "root": [ { "a": "1" }, { "b": "2" } ]
+        });
+        let out = build_xml_string(&el);
+        assert!(out.contains("<root>"));
+        assert!(out.contains("<a>1</a>"));
+        assert!(out.contains("<b>2</b>"));
+        assert!(out.contains("</root>"));
+    }
+
+    #[test]
+    fn build_xml_string_root_value_primitive() {
+        // Root value is primitive (write_element _ branch for top-level content)
+        let el = json!({ "root": 42 });
+        let out = build_xml_string(&el);
+        assert!(out.contains("<root>42</root>"));
+    }
+
+    #[test]
+    fn build_xml_string_attribute_value_object_uses_serde_fallback() {
+        // Attribute value that is Object hits value_to_string _ branch (serde_json::to_string)
+        let el = json!({
+            "root": { "@complex": { "nested": true }, "child": "v" }
+        });
+        let out = build_xml_string(&el);
+        assert!(out.contains("child"));
+        assert!(out.contains("v"));
+    }
 }
