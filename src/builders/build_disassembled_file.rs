@@ -91,3 +91,83 @@ pub async fn build_disassembled_file(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn opts_base(disassembled_path: &str) -> BuildDisassembledFileOptions<'_> {
+        BuildDisassembledFileOptions {
+            content: json!({ "a": "b" }),
+            disassembled_path,
+            output_file_name: Some("out.xml"),
+            subdirectory: None,
+            wrap_key: None,
+            is_grouped_array: false,
+            root_element_name: "Root",
+            root_attributes: Value::Object(Map::new()),
+            xml_declaration: None,
+            format: "xml",
+            unique_id_elements: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn build_disassembled_file_file_name_output_when_wrap_key_no_output_name_grouped_array() {
+        // wrap_key Some, is_grouped_array true → file_name = "output"
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().to_str().unwrap();
+        let mut opts = opts_base(path);
+        opts.output_file_name = None;
+        opts.wrap_key = Some("wrap");
+        opts.is_grouped_array = true;
+        opts.content = json!([{ "x": "1" }]);
+        build_disassembled_file(opts).await.unwrap();
+        assert!(temp.path().join("output").exists());
+    }
+
+    #[tokio::test]
+    async fn build_disassembled_file_file_name_output_when_wrap_key_content_not_object() {
+        // wrap_key Some, content not object (e.g. Array) → file_name = "output"
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().to_str().unwrap();
+        let mut opts = opts_base(path);
+        opts.output_file_name = None;
+        opts.wrap_key = Some("wrap");
+        opts.is_grouped_array = false;
+        opts.content = json!([{ "id": "a" }]);
+        build_disassembled_file(opts).await.unwrap();
+        assert!(temp.path().join("output").exists());
+    }
+
+    #[tokio::test]
+    async fn build_disassembled_file_file_name_output_when_no_wrap_key_no_output_name() {
+        // No output_file_name, no wrap_key → file_name = "output"
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().to_str().unwrap();
+        let mut opts = opts_base(path);
+        opts.output_file_name = None;
+        opts.wrap_key = None;
+        build_disassembled_file(opts).await.unwrap();
+        assert!(temp.path().join("output").exists());
+    }
+
+    #[tokio::test]
+    async fn build_disassembled_file_content_not_object_no_spread() {
+        // No wrap_key, content not object → inner not updated from content (only root_attributes)
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().to_str().unwrap();
+        let mut opts = opts_base(path);
+        opts.output_file_name = Some("single.xml");
+        opts.wrap_key = None;
+        opts.content = json!(42);
+        build_disassembled_file(opts).await.unwrap();
+        let out = fs::read_to_string(temp.path().join("single.xml"))
+            .await
+            .unwrap();
+        assert!(out.contains("<Root>"));
+        // content 42 is not spread (only objects are); root is empty
+        assert!(out.contains("</Root>"));
+    }
+}

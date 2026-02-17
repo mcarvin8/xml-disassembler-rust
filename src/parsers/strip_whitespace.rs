@@ -104,4 +104,21 @@ mod tests {
         let result = strip_whitespace_text_nodes(&input);
         assert!(result.get("#text").map(|v| v.is_null()) == Some(true));
     }
+
+    #[test]
+    fn preserves_null_cdata_comment_and_text_tail_keys() {
+        // Special keys #cdata, #comment, #text-tail are kept even when value is null (insert branch)
+        let input = json!({
+            "#cdata": null,
+            "#comment": null,
+            "#text-tail": null,
+            "a": "b"
+        });
+        let result = strip_whitespace_text_nodes(&input);
+        let obj = result.as_object().unwrap();
+        assert!(obj.get("#cdata").map(|v| v.is_null()) == Some(true));
+        assert!(obj.get("#comment").map(|v| v.is_null()) == Some(true));
+        assert!(obj.get("#text-tail").map(|v| v.is_null()) == Some(true));
+        assert_eq!(obj.get("a").and_then(|v| v.as_str()), Some("b"));
+    }
 }

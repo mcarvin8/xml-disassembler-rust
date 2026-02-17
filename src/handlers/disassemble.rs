@@ -385,3 +385,14 @@ impl Default for DisassembleXmlFileHandler {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    fn disassemble_handler_default_equals_new() {
+        let _ = DisassembleXmlFileHandler::default();
+    }
+}

@@ -357,3 +357,14 @@ impl Default for ReassembleXmlFileHandler {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    fn reassemble_handler_default_equals_new() {
+        let _ = ReassembleXmlFileHandler::default();
+    }
+}

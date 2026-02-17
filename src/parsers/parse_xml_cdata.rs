@@ -313,6 +313,7 @@ mod tests {
         assert_eq!(parse_text_value("0", true).as_str(), Some("0")); // leading_zero_as_string keeps "0" as string
         assert!(parse_text_value("0", false).as_i64() == Some(0));
         assert_eq!(parse_text_value("01", true).as_str(), Some("01"));
+        assert_eq!(parse_text_value("09", true).as_str(), Some("09")); // u64 parses but we keep as string (fall-through)
         assert!(
             parse_text_value("2.5", true)
                 .as_f64()
@@ -329,5 +330,32 @@ mod tests {
         assert!(parse_text_value("true", true).as_bool() == Some(true));
         assert!(parse_text_value("false", true).as_bool() == Some(false));
         assert_eq!(parse_text_value("hello", true).as_str(), Some("hello"));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_duplicate_empty_siblings_become_array() {
+        // Two empty elements with same name: second triggers remove+insert Array (Event::End path)
+        let xml = r#"<r><a/><a/></r>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let r = v.get("r").and_then(|r| r.as_object()).unwrap();
+        let arr = r.get("a").and_then(|a| a.as_array()).unwrap();
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_text_tail_appended_after_second_comment() {
+        // Comment then text (#text-tail), then comment then text -> append to #text-tail
+        let xml = r#"<r><!--c1-->t1<!--c2-->t2</r>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let r = v.get("r").and_then(|r| r.as_object()).unwrap();
+        assert_eq!(r.get("#text-tail").and_then(|t| t.as_str()), Some("t1t2"));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_empty_document_returns_empty_object() {
+        // Eof with no root (e.g. empty or only whitespace) -> empty object
+        let xml = r#""#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        assert!(v.as_object().unwrap().is_empty());
     }
 }

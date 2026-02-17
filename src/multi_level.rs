@@ -296,4 +296,27 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         assert!(load_multi_level_config(dir.path()).await.is_none());
     }
+
+    #[tokio::test]
+    async fn ensure_segment_files_structure_adds_xmlns_and_rewrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Root>
+  <programProcesses><x>1</x></programProcesses>
+</Root>"#;
+        let path = dir.path().join("segment.xml");
+        tokio::fs::write(&path, xml).await.unwrap();
+        ensure_segment_files_structure(
+            dir.path(),
+            "Root",
+            "programProcesses",
+            "http://example.com",
+        )
+        .await
+        .unwrap();
+        let out = tokio::fs::read_to_string(&path).await.unwrap();
+        assert!(out.contains("http://example.com"));
+        assert!(out.contains("<programProcesses>"));
+        assert!(out.contains("<x>1</x>"));
+    }
 }
