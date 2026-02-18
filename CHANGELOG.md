@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.2...v0.4.3) - 2026-02-18
+
+### Other
+
+- include coverage commands in contributing
+- update package description in Cargo.toml to match repo
+- fixture round-trips and coverage to 95%+
+- raise lib coverage to 93% with new unit and integration tests
+- *(badge)* add Codecov badge
+- *(coverage)* run cargo-llvm-cov to generate code coverage and output to Codecov
+- fix clippy issues and formatting
+- expand coverage with unit and integration tests
+- add images to readme for each strategy
+
 ## [0.4.2](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.1...v0.4.2) - 2026-02-12
 
 ### Fixed
