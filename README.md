@@ -7,7 +7,7 @@
 
 Disassemble large XML files into smaller files and reassemble the original XML. Preserves the XML declaration, root namespace, and element order so that a full round-trip (disassemble → reassemble) reproduces the original file contents.
 
-> **Note:** This is a Rust implementation of the original [TypeScript xml-disassembler](https://github.com/mcarvin8/xml-disassembler).
+> **Note:** This crate is now the primary implementation of the xml-disassembler. The original [TypeScript](https://github.com/mcarvin8/xml-disassembler) project has been refactored into a Node.js wrapper that executes this Rust crate via [Neon](https://neon-rs.dev/).
 
 ---
 
@@ -22,7 +22,6 @@ Disassemble large XML files into smaller files and reassemble the original XML. 
 - [Ignore file](#ignore-file)
 - [Logging](#logging)
 - [XML parser](#xml-parser)
-- [Testing](#testing)
 - [License](#license)
 - [Contribution](#contribution)
 
@@ -260,17 +259,6 @@ Parsing is done with [quick-xml](https://github.com/tafia/quick-xml), with suppo
 - **CDATA** – Preserved and output as `#cdata` in the parsed structure.
 - **Comments** – Preserved in the XML output.
 - **Attributes** – Stored with `@` prefix (e.g. `@version`, `@encoding`).
-
-## Testing
-
-Run all tests:
-
-```bash
-cargo test
-```
-
-- **Unit tests** – In-module tests for parsers, builders, and merge logic (e.g. `strip_whitespace`, `merge_xml_elements`, `extract_root_attributes`, `parse_xml`).
-- **Integration test** – `tests/disassemble_reassemble.rs` runs a full round-trip: disassemble a fixture XML, reassemble it, and assert the reassembled content equals the original file.
 
 ## License
 

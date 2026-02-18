@@ -16,24 +16,21 @@ keywords.
 
 Try to do one pull request per change.
 
-### Updating the changelog
+### Releasing
 
-Update the changes you have made in
-[CHANGELOG](https://github.com/mcarvin8/xml-disassembler-rust/blob/main/CHANGELOG.md)
-file under the **Unreleased** section.
+Releases and changelog generation is fully automated using release-plz.
 
-Add the changes of your pull request to one of the following subsections,
-depending on the types of changes defined by
-[Keep a changelog](https://keepachangelog.com/en/1.0.0/):
+To ensure your changes are properly categorized in the changelog, please follow [conventional commit messages](https://www.conventionalcommits.org/en/v1.0.0/).
 
-- `Added` for new features.
-- `Changed` for changes in existing functionality.
-- `Deprecated` for soon-to-be removed features.
-- `Removed` for now removed features.
-- `Fixed` for any bug fixes.
-- `Security` in case of vulnerabilities.
+### CI & Code Coverage
 
-If the required subsection does not exist yet under **Unreleased**, create it!
+All pull requests run automated CI checks. Tests are executed using cargo-llvm-cov and coverage reports are uploaded to Codecov. PRs must pass all tests and hit 90% coverage before merging.
+
+You can optionally run this command locally to run tests and generate coverage:
+
+```bash
+cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info --ignore-filename-regex 'main\.rs'
+```
 
 ## Developing
 
@@ -44,8 +41,18 @@ This is no different than other Rust projects.
 ```shell
 git clone https://github.com/mcarvin8/xml-disassembler-rust
 cd xml-disassembler
+cargo build
+```
+## Testing
+
+Run all tests:
+
+```bash
 cargo test
 ```
+
+- **Unit tests** – In-module tests for parsers, builders, and merge logic (e.g. `strip_whitespace`, `merge_xml_elements`, `extract_root_attributes`, `parse_xml`).
+- **Integration test** – `tests/disassemble_reassemble.rs` runs a full round-trip: disassemble a fixture XML, reassemble it, and assert the reassembled content equals the original file.
 
 ### Useful Commands
 
@@ -65,6 +72,12 @@ cargo test
 
   ```shell
   cargo test --all-features --workspace
+  ```
+
+- Run all tests with code coverage (install llvm-cov first):
+
+  ```shell
+  cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info --ignore-filename-regex 'main\.rs'
   ```
 
 - Check to see if there are code formatting issues
