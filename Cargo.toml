@@ -2,7 +2,7 @@
 name = "xml-disassembler"
 version = "0.4.2"
 edition = "2021"
-description = "Disassemble large XML files into smaller files and reassemble the original XML."
+description = "Disassemble XML into smaller, manageable files and reassemble on demand."
 repository = "https://github.com/mcarvin8/xml-disassembler-rust"
 license = "MIT"
 
