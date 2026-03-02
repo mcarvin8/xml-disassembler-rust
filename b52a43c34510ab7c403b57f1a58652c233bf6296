@@ -1,0 +1,24 @@
+src/parsers/parse_xml_cdata.rs
+  8b9008c6a85f12b0 429
+  c97ddcd64c683df4 3-7,9,14-20,49-87,97-98,104-105,118-119,144-145,177-179,181,184-186,191-193,195-196,407-428
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.7",
+  "base_commit_sha": "b52a43c34510ab7c403b57f1a58652c233bf6296",
+  "prompts": {
+    "c97ddcd64c683df4": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "6c622bd2-6ef6-41be-a8e1-6fbf6597abeb",
+        "model": "composer-1.5"
+      },
+      "human_author": "Matt Carvin <90224411+mcarvin8@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 157,
+      "total_deletions": 89,
+      "accepted_lines": 95,
+      "overriden_lines": 0
+    }
+  }
+}
