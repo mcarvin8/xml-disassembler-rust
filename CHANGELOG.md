@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.3...v0.4.4) - 2026-03-02
+
+### Fixed
+
+- support quick-xml 0.39 entity handling for round-trip XML
+
+### Other
+
+- Merge pull request #27 from mcarvin8/dependabot/cargo/quick-xml-0.39.2
+- *(deps)* bump quick-xml from 0.36.2 to 0.39.2
+
 ## [0.4.3](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.2...v0.4.3) - 2026-02-18
 
 ### Other
