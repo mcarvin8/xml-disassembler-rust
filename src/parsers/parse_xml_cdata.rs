@@ -1,9 +1,23 @@
 //! XML parser that preserves CDATA sections.
 //! Uses quick-xml directly to distinguish CDATA from regular text.
+//!
+//! In quick-xml 0.38+, entity references (&quot;, &#34;, etc.) are emitted as
+//! Event::GeneralRef. We accumulate raw text + entity refs, then unescape once
+//! to preserve whitespace between entities (quick-xml can drop spaces when
+//! emitting Text/GeneralRef separately).
 
+use quick_xml::escape::unescape;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use serde_json::{Map, Number, Value};
+
+/// Append raw entity reference to buffer (e.g. "quot" -> "&quot;").
+fn append_entity_to_raw(ref_: &quick_xml::events::BytesRef<'_>, raw: &mut String) {
+    let name = String::from_utf8_lossy(ref_.as_ref());
+    raw.push('&');
+    raw.push_str(&name);
+    raw.push(';');
+}
 
 /// Parse text content - match quickxml_to_serde behavior for type inference.
 fn parse_text_value(text: &str, leading_zero_as_string: bool) -> Value {
@@ -32,6 +46,45 @@ fn parse_text_value(text: &str, leading_zero_as_string: bool) -> Value {
     Value::String(text.to_string())
 }
 
+/// Flush accumulated raw text buffer: unescape entities and add to current element.
+fn flush_text_buffer(
+    raw: &mut String,
+    stack: &mut [(String, Map<String, Value>)],
+    is_after_comment: bool,
+) {
+    if raw.is_empty() {
+        return;
+    }
+    let text = unescape(raw.as_str()).unwrap_or_default().into_owned();
+    raw.clear();
+    if text.is_empty() {
+        return;
+    }
+    let val_raw = Value::String(text.clone());
+    let val_parsed = parse_text_value(&text, true);
+    if let Some((_, elem)) = stack.last_mut() {
+        if is_after_comment {
+            if let Some(prev) = elem.get_mut("#text-tail") {
+                if let (Some(a), Some(b)) = (prev.as_str(), val_raw.as_str()) {
+                    *prev = Value::String(format!("{}{}", a, b));
+                }
+            } else {
+                elem.insert("#text-tail".to_string(), val_raw);
+            }
+        } else if elem.contains_key("#cdata") {
+            elem.insert("#text".to_string(), val_raw);
+        } else if elem.contains_key("#text") {
+            if let Some(prev) = elem.get_mut("#text") {
+                if let (Some(a), Some(b)) = (prev.as_str(), val_parsed.as_str()) {
+                    *prev = Value::String(format!("{}{}", a, b));
+                }
+            }
+        } else {
+            elem.insert("#text".to_string(), val_raw);
+        }
+    }
+}
+
 /// Parse XML string to JSON Value, preserving CDATA as #cdata key.
 /// Produces the same structure as quickxml_to_serde but with #cdata for CDATA content.
 pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
@@ -41,11 +94,15 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
     let mut stack: Vec<(String, Map<String, Value>)> = Vec::new();
     let mut root_name: Option<String> = None;
     let mut root_value: Option<Value> = None;
+    let mut text_buffer = String::new();
+    let mut text_buffer_after_comment = false;
 
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
+                flush_text_buffer(&mut text_buffer, &mut stack, text_buffer_after_comment);
+                text_buffer_after_comment = false;
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
                 let mut attrs = Map::new();
                 for a in e.attributes().flatten() {
@@ -58,6 +115,8 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
                 stack.push((name, attrs));
             }
             Ok(Event::End(_e)) => {
+                flush_text_buffer(&mut text_buffer, &mut stack, text_buffer_after_comment);
+                text_buffer_after_comment = false;
                 if let Some((popped_name, elem)) = stack.pop() {
                     let value = if elem.is_empty() {
                         Value::Object(Map::new())
@@ -82,6 +141,8 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
                 }
             }
             Ok(Event::Empty(e)) => {
+                flush_text_buffer(&mut text_buffer, &mut stack, text_buffer_after_comment);
+                text_buffer_after_comment = false;
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
                 let mut attrs = Map::new();
                 for a in e.attributes().flatten() {
@@ -113,41 +174,26 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
                 }
             }
             Ok(Event::Text(e)) => {
-                let text = e.unescape().unwrap_or_default().to_string();
-                // Preserve all text including whitespace (needed for round-trip of mixed content)
-                if let Some((_, elem)) = stack.last_mut() {
-                    let val_raw = Value::String(text.clone());
-                    let val_parsed = parse_text_value(&text, true);
-                    if elem.contains_key("#comment") {
-                        // Text after comment goes to #text-tail - preserve raw for round-trip
-                        if let Some(prev) = elem.get_mut("#text-tail") {
-                            if let (Some(a), Some(b)) = (prev.as_str(), val_raw.as_str()) {
-                                *prev = Value::String(format!("{}{}", a, b));
-                            }
-                        } else {
-                            elem.insert("#text-tail".to_string(), val_raw);
-                        }
-                    } else if elem.contains_key("#cdata") {
-                        elem.insert("#text".to_string(), val_raw);
-                    } else if elem.contains_key("#text") {
-                        if let Some(prev) = elem.get_mut("#text") {
-                            if let (Some(a), Some(b)) = (prev.as_str(), val_parsed.as_str()) {
-                                *prev = Value::String(format!("{}{}", a, b));
-                            }
-                        }
-                    } else {
-                        // First #text: use raw to preserve whitespace before comment/CDATA
-                        elem.insert("#text".to_string(), val_raw);
-                    }
+                let text = e.decode().unwrap_or_default();
+                if let Some((_, elem)) = stack.last() {
+                    text_buffer_after_comment = elem.contains_key("#comment");
                 }
+                text_buffer.push_str(&text);
             }
             Ok(Event::Comment(e)) => {
-                let content = e.unescape().unwrap_or_default().to_string();
+                flush_text_buffer(&mut text_buffer, &mut stack, text_buffer_after_comment);
+                text_buffer_after_comment = false;
+                let content = e.decode().unwrap_or_default().to_string();
                 if let Some((_, elem)) = stack.last_mut() {
                     elem.insert("#comment".to_string(), Value::String(content));
                 }
             }
+            Ok(Event::GeneralRef(ref_)) => {
+                append_entity_to_raw(&ref_, &mut text_buffer);
+            }
             Ok(Event::CData(e)) => {
+                flush_text_buffer(&mut text_buffer, &mut stack, text_buffer_after_comment);
+                text_buffer_after_comment = false;
                 // CDATA content is already raw (unescaped) - convert bytes to string
                 let content = String::from_utf8_lossy(e.as_ref()).to_string();
                 if let Some((_, elem)) = stack.last_mut() {
@@ -357,5 +403,30 @@ mod tests {
         let xml = r#""#;
         let v = parse_xml_with_cdata(xml).unwrap();
         assert!(v.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_unescapes_entities_in_text() {
+        // quick-xml 0.38+ emits entities as Event::GeneralRef; we resolve and append.
+        let xml = r#"<r><expr>IF(x, &quot;created&quot;, &quot;updated&quot;)</expr></r>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let r = v.get("r").and_then(|r| r.as_object()).unwrap();
+        let expr = r.get("expr").and_then(|e| e.as_object()).unwrap();
+        let text = expr.get("#text").and_then(|t| t.as_str()).unwrap();
+        // Must have actual quote chars so round-trip produces &quot; in output
+        assert!(text.contains(r#""created""#) && text.contains(r#""updated""#));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_preserves_space_after_comma_in_entities() {
+        // Fixture format: comma space before second entity - must preserve for round-trip
+        let xml = r#"<e>IF(a, &quot;x&quot;, &quot;y&quot;)</e>"#;
+        let v = parse_xml_with_cdata(xml).unwrap();
+        let e = v.get("e").and_then(|e| e.as_object()).unwrap();
+        let text = e.get("#text").and_then(|t| t.as_str()).unwrap();
+        assert_eq!(
+            text, r#"IF(a, "x", "y")"#,
+            "space after comma must be preserved"
+        );
     }
 }
