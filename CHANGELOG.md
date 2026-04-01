@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.4...v0.4.5) - 2026-04-01
+
+### Other
+
+- *(deps)* bump tempfile from 3.26.0 to 3.27.0 ([#36](https://github.com/mcarvin8/xml-disassembler-rust/pull/36))
+- *(deps)* bump tokio from 1.49.0 to 1.50.0 ([#34](https://github.com/mcarvin8/xml-disassembler-rust/pull/34))
+- *(deps)* bump env_logger from 0.11.9 to 0.11.10 ([#33](https://github.com/mcarvin8/xml-disassembler-rust/pull/33))
+- *(deps)* bump codecov/codecov-action from 5 to 6 ([#32](https://github.com/mcarvin8/xml-disassembler-rust/pull/32))
+
 ## [0.4.4](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.3...v0.4.4) - 2026-03-02
 
 ### Fixed
