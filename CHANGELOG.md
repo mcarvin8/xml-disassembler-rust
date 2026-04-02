@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.5...v0.4.6) - 2026-04-02
+
+### Other
+
+- *(deps)* bump sha2 from 0.10.9 to 0.11.0 ([#35](https://github.com/mcarvin8/xml-disassembler-rust/pull/35))
+
 ## [0.4.5](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.4...v0.4.5) - 2026-04-01
 
 ### Other
