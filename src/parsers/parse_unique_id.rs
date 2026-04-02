@@ -12,7 +12,13 @@ fn create_short_hash(element: &XmlElement) -> String {
     let mut hasher = Sha256::new();
     hasher.update(stringified.as_bytes());
     let result = hasher.finalize();
-    format!("{:x}", result)[..8].to_string()
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut s = String::with_capacity(8);
+    for b in result.iter().take(4) {
+        s.push(HEX[(b >> 4) as usize] as char);
+        s.push(HEX[(b & 0xf) as usize] as char);
+    }
+    s
 }
 
 fn is_object(value: &Value) -> bool {
