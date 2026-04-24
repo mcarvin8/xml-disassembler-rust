@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.6...v0.4.7) - 2026-04-24
+
+### Fixed
+
+- prevent reassemble from emitting empty <root></root> when first parsed file is empty or declaration-only ([#41](https://github.com/mcarvin8/xml-disassembler-rust/pull/41))
+
+### Other
+
+- add regression test
+- add cargo-husky pre-commit hook for fmt and clippy
+- cover remaining reachable branches; simplify unreachable defensive code ([#39](https://github.com/mcarvin8/xml-disassembler-rust/pull/39))
+
 ## [0.4.6](https://github.com/mcarvin8/xml-disassembler-rust/compare/v0.4.5...v0.4.6) - 2026-04-02
 
 ### Other
