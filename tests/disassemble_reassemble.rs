@@ -243,6 +243,38 @@ async fn reassemble_empty_directory_returns_ok_no_output() {
     assert!(!temp_dir.path().join("empty.xml").exists());
 }
 
+/// Regression test for the `<root></root>` flake: when every parsed file is
+/// empty or declaration-only, `merge_xml_elements` returns None and
+/// `reassemble_plain` must skip writing rather than emit a stub document.
+#[tokio::test]
+async fn reassemble_directory_with_only_empty_xml_files_writes_no_output() {
+    let _ = env_logger::try_init();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let dir = temp_dir.path().join("only_empty");
+    std::fs::create_dir_all(&dir).expect("create dir");
+    // Two XML-shaped files that parse to an empty object / declaration-only
+    // object respectively - together they exercise both the "no root in any
+    // element" path and the new early-return branch in reassemble_plain.
+    std::fs::write(dir.join("a.xml"), "").expect("write empty xml");
+    std::fs::write(
+        dir.join("b.xml"),
+        r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+    )
+    .expect("write decl-only xml");
+
+    let handler = ReassembleXmlFileHandler::new();
+    handler
+        .reassemble(dir.to_str().unwrap(), Some("xml"), false)
+        .await
+        .expect("reassemble should return Ok(())");
+
+    // No stub file should be produced; the directory's output path must not exist.
+    assert!(
+        !temp_dir.path().join("only_empty.xml").exists(),
+        "reassemble must not emit a <root></root> stub when no usable root is found"
+    );
+}
+
 #[tokio::test]
 async fn disassemble_non_xml_file_returns_ok_no_op() {
     let _ = env_logger::try_init();
