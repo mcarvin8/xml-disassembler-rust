@@ -152,10 +152,16 @@ impl ReassembleXmlFileHandler {
             return Ok(());
         }
 
-        // merge_xml_elements only fails for an empty slice (handled above) or when the first
-        // element has no root key; fall back to an empty object in that unreachable case.
-        let mut merged = merge_xml_elements(&parsed_objects)
-            .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+        // merge_xml_elements only returns None when every parsed element is empty or
+        // declaration-only (no usable root). Treat that the same as "nothing parsed"
+        // rather than emitting an `<root></root>` stub.
+        let Some(mut merged) = merge_xml_elements(&parsed_objects) else {
+            log::error!(
+                "No usable root element found while merging files under {}. A reassembled XML file was not created.",
+                file_path
+            );
+            return Ok(());
+        };
 
         // Apply stored key order so reassembled XML matches original document order.
         let key_order_path = Path::new(&file_path).join(".key_order.json");

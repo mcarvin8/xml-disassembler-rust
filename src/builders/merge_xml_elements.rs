@@ -104,16 +104,24 @@ pub fn reorder_root_keys(element: &XmlElement, key_order: &[String]) -> Option<X
 }
 
 /// Merge multiple XML elements into one.
+///
+/// Scans elements for the first non-`?xml` root key; tolerates leading entries
+/// that are empty or declaration-only (e.g. a partially-written disassembled file),
+/// which previously caused the whole merge to return `None` and the caller to
+/// emit an empty `<root>` document.
 pub fn merge_xml_elements(elements: &[XmlElement]) -> Option<XmlElement> {
     if elements.is_empty() {
         log::error!("No elements to merge.");
         return None;
     }
 
-    let first = &elements[0];
-    let root_key = first.as_object()?.keys().find(|k| *k != "?xml")?.clone();
-    let mut merged_content = Map::new();
+    let root_key = elements
+        .iter()
+        .find_map(|el| el.as_object()?.keys().find(|k| *k != "?xml").cloned())?;
 
+    let declaration = elements.iter().find_map(|el| el.as_object()?.get("?xml"));
+
+    let mut merged_content = Map::new();
     for element in elements {
         if let Some(obj) = element.as_object() {
             if let Some(root_content) = obj.get(&root_key) {
@@ -124,7 +132,6 @@ pub fn merge_xml_elements(elements: &[XmlElement]) -> Option<XmlElement> {
         }
     }
 
-    let declaration = first.as_object()?.get("?xml");
     Some(build_final_xml_element(
         declaration,
         &root_key,
@@ -291,6 +298,37 @@ mod tests {
         let root = out.get("Root").and_then(|v| v.as_object()).unwrap();
         let keys: Vec<_> = root.keys().cloned().collect();
         assert_eq!(keys, ["a", "b"]);
+    }
+
+    #[test]
+    fn merge_skips_leading_declaration_only_element() {
+        // Simulates a partially-written disassembled file that only contains the XML
+        // declaration: the merge should still produce a valid root from later elements.
+        let a = json!({ "?xml": { "@version": "1.0" } });
+        let b = json!({ "?xml": { "@version": "1.0" }, "Root": { "item": "x" } });
+        let merged = merge_xml_elements(&[a, b]).unwrap();
+        let root = merged.get("Root").and_then(|v| v.as_object()).unwrap();
+        assert_eq!(root.get("item").and_then(|v| v.as_str()), Some("x"));
+    }
+
+    #[test]
+    fn merge_skips_leading_empty_object_element() {
+        // A fully empty object leading the slice (e.g. an empty file) used to poison
+        // the merge and emit `<root></root>`. Now it's skipped and the next element wins.
+        let a = json!({});
+        let b = json!({ "Root": { "item": "ok" } });
+        let merged = merge_xml_elements(&[a, b]).unwrap();
+        let root = merged.get("Root").and_then(|v| v.as_object()).unwrap();
+        assert_eq!(root.get("item").and_then(|v| v.as_str()), Some("ok"));
+    }
+
+    #[test]
+    fn merge_returns_none_when_every_element_has_no_root() {
+        // All elements are empty or declaration-only: merge must return None so callers
+        // can surface an error rather than writing a stub document.
+        let a = json!({});
+        let b = json!({ "?xml": { "@version": "1.0" } });
+        assert!(merge_xml_elements(&[a, b]).is_none());
     }
 
     #[test]
