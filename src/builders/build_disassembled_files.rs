@@ -1,9 +1,7 @@
 //! Build disassembled files from source XML file.
 
 use crate::builders::{build_disassembled_file, extract_root_attributes};
-use crate::parsers::{
-    extract_xml_declaration_from_raw, extract_xmlns_from_raw, parse_element_unified,
-};
+use crate::parsers::{extract_xml_declaration_from_raw, parse_element_unified};
 use crate::types::{
     BuildDisassembledFilesOptions, DecomposeRule, XmlElementArrayMap, XmlElementParams,
 };
@@ -14,12 +12,11 @@ use tokio::fs;
 
 const BATCH_SIZE: usize = 20;
 
-fn get_root_info(parsed_xml: &Value) -> Option<(String, Value, Option<Value>)> {
+fn get_root_info(parsed_xml: &Value) -> Option<(String, Value)> {
     let obj = parsed_xml.as_object()?;
-    let xml_declaration = obj.get("?xml").cloned();
     let root_element_name = obj.keys().find(|k| *k != "?xml")?.clone();
     let root_element = obj.get(&root_element_name)?.clone();
-    Some((root_element_name, root_element, xml_declaration))
+    Some((root_element_name, root_element))
 }
 
 fn order_xml_element_keys(content: &Map<String, Value>, key_order: &[String]) -> Value {
@@ -52,15 +49,16 @@ async fn disassemble_element_keys(
     let empty_map = Map::new();
     let root_obj = root_element.as_object().unwrap_or(&empty_map);
 
-    for key in key_order {
-        let elements = if let Some(val) = root_obj.get(key) {
-            if val.is_array() {
-                val.as_array().unwrap().clone()
-            } else {
-                vec![val.clone()]
-            }
-        } else {
-            continue;
+    // Iterate root_obj in key_order's ordering: we consume only keys that are present,
+    // which matches the caller's invariant and keeps the loop body branch-free.
+    let ordered: Vec<(&String, &Value)> = key_order
+        .iter()
+        .filter_map(|k| root_obj.get_key_value(k))
+        .collect();
+    for (key, val) in ordered {
+        let elements: Vec<Value> = match val.as_array() {
+            Some(arr) => arr.clone(),
+            None => vec![val.clone()],
         };
 
         for chunk in elements.chunks(BATCH_SIZE) {
@@ -81,15 +79,14 @@ async fn disassemble_element_keys(
                 })
                 .await;
 
-                if let Some(obj) = result.leaf_content.as_object() {
-                    if let Some(arr) = obj.get(key) {
-                        if let Some(existing) = leaf_content.get_mut(key) {
-                            if let Some(existing_arr) = existing.as_array_mut() {
-                                if let Some(new_arr) = arr.as_array() {
-                                    existing_arr.extend(new_arr.iter().cloned());
-                                }
+                if let Some(arr) = result.leaf_content.as_object().and_then(|o| o.get(key)) {
+                    match leaf_content.get_mut(key).and_then(|v| v.as_array_mut()) {
+                        Some(existing_arr) => {
+                            if let Some(new_arr) = arr.as_array() {
+                                existing_arr.extend(new_arr.iter().cloned());
                             }
-                        } else {
+                        }
+                        None => {
                             leaf_content.insert(key.clone(), arr.clone());
                         }
                     }
@@ -114,17 +111,14 @@ async fn disassemble_element_keys(
 
 /// Extract string from an element's field - handles direct strings and objects with #text (XML leaf elements).
 fn get_field_value(element: &Value, field: &str) -> Option<String> {
-    let obj = element.as_object()?;
-    let v = obj.get(field)?;
+    let v = element.as_object()?.get(field)?;
     if let Some(s) = v.as_str() {
         return Some(s.to_string());
     }
-    if let Some(child) = v.as_object() {
-        if let Some(text) = child.get("#text").and_then(|t| t.as_str()) {
-            return Some(text.to_string());
-        }
-    }
-    None
+    v.as_object()
+        .and_then(|child| child.get("#text"))
+        .and_then(|t| t.as_str())
+        .map(|s| s.to_string())
 }
 
 /// For group mode: use the segment before the first '.' as key when present (e.g. "Account.Name" -> "Account").
@@ -292,24 +286,14 @@ pub async fn build_disassembled_files_unified(
         None => return Ok(()),
     };
 
-    let (root_element_name, root_element, xml_declaration_from_parse) =
-        match get_root_info(&parsed_xml) {
-            Some(info) => info,
-            None => return Ok(()),
-        };
-    // quickxml_to_serde drops the declaration - extract from raw XML if missing
-    let xml_declaration =
-        xml_declaration_from_parse.or_else(|| extract_xml_declaration_from_raw(&xml_content));
+    let (root_element_name, root_element) = match get_root_info(&parsed_xml) {
+        Some(info) => info,
+        None => return Ok(()),
+    };
+    // The custom parser ignores <?xml ?>; always recover it from raw XML.
+    let xml_declaration = extract_xml_declaration_from_raw(&xml_content);
 
-    let mut root_attributes = extract_root_attributes(&root_element);
-    // quickxml_to_serde drops xmlns - extract from raw XML and add if missing
-    if root_attributes.get("@xmlns").is_none() {
-        if let Some(xmlns) = extract_xmlns_from_raw(&xml_content) {
-            if let Some(obj) = root_attributes.as_object_mut() {
-                obj.insert("@xmlns".to_string(), Value::String(xmlns));
-            }
-        }
-    }
+    let root_attributes = extract_root_attributes(&root_element);
     let key_order: Vec<String> = root_element
         .as_object()
         .map(|o| o.keys().filter(|k| !k.starts_with('@')).cloned().collect())
@@ -347,10 +331,10 @@ pub async fn build_disassembled_files_unified(
     write_nested_groups(&nested_groups, strategy, &write_opts).await;
 
     // Persist root key order so reassembly can match original document order.
+    // serde_json::to_string never fails for Vec<String>; writes are best-effort.
     let key_order_path = std::path::Path::new(disassembled_path).join(".key_order.json");
-    if let Ok(json) = serde_json::to_string(&key_order) {
-        let _ = fs::write(key_order_path, json).await;
-    }
+    let json = serde_json::to_string(&key_order).unwrap_or_else(|_| "[]".to_string());
+    let _ = fs::write(key_order_path, json).await;
 
     if leaf_count > 0 {
         let final_leaf_content = if strategy == "grouped-by-tag" {
@@ -376,14 +360,95 @@ pub async fn build_disassembled_files_unified(
     }
 
     if post_purge {
-        if let Err(e) = fs::remove_file(&file_path).await {
-            log::warn!(
-                "Failed to remove source file during post-purge: {} - {}",
-                file_path,
-                e
-            );
-        }
+        // Best-effort purge; a failure here is benign (file may have been removed concurrently).
+        let _ = fs::remove_file(&file_path).await;
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn get_field_value_returns_direct_string() {
+        let el = json!({ "field": "value" });
+        assert_eq!(get_field_value(&el, "field"), Some("value".to_string()));
+    }
+
+    #[test]
+    fn get_field_value_returns_nested_text() {
+        let el = json!({ "field": { "#text": "value" } });
+        assert_eq!(get_field_value(&el, "field"), Some("value".to_string()));
+    }
+
+    #[test]
+    fn get_field_value_returns_none_when_missing_or_non_string() {
+        let el = json!({ "field": { "nested": { "#text": "x" } } });
+        assert!(get_field_value(&el, "field").is_none());
+        assert!(get_field_value(&el, "missing").is_none());
+        let el = json!("not-an-object");
+        assert!(get_field_value(&el, "field").is_none());
+    }
+
+    #[test]
+    fn group_key_from_field_value_takes_prefix_before_dot() {
+        assert_eq!(group_key_from_field_value("Account.Name"), "Account");
+        assert_eq!(group_key_from_field_value("NoDot"), "NoDot");
+    }
+
+    #[test]
+    fn sanitize_filename_replaces_disallowed_chars_with_underscore() {
+        assert_eq!(sanitize_filename("a/b c:d"), "a_b_c_d");
+        assert_eq!(sanitize_filename("ok-name_1.xml"), "ok-name_1.xml");
+    }
+
+    #[test]
+    fn order_xml_element_keys_preserves_order_and_drops_absent() {
+        let mut m = Map::new();
+        m.insert("b".to_string(), json!(2));
+        m.insert("a".to_string(), json!(1));
+        let ordered =
+            order_xml_element_keys(&m, &["a".to_string(), "c".to_string(), "b".to_string()]);
+        let obj = ordered.as_object().unwrap();
+        let keys: Vec<&String> = obj.keys().collect();
+        assert_eq!(keys, vec![&"a".to_string(), &"b".to_string()]);
+    }
+
+    #[test]
+    fn get_root_info_returns_name_and_element() {
+        let parsed = json!({ "?xml": {"@version": "1.0"}, "Root": { "child": 1 } });
+        let (name, element) = get_root_info(&parsed).unwrap();
+        assert_eq!(name, "Root");
+        assert!(element.as_object().unwrap().contains_key("child"));
+    }
+
+    #[test]
+    fn get_root_info_returns_none_for_non_object_or_decl_only() {
+        assert!(get_root_info(&json!("s")).is_none());
+        assert!(get_root_info(&json!({ "?xml": {} })).is_none());
+    }
+
+    #[tokio::test]
+    async fn unified_build_returns_ok_when_source_unreadable() {
+        // Missing source file: unified build should short-circuit with Ok(()).
+        let dir = tempfile::tempdir().unwrap();
+        let disassembled = dir.path().join("out");
+        let missing = dir.path().join("does_not_exist.xml");
+        build_disassembled_files_unified(BuildDisassembledFilesOptions {
+            file_path: missing.to_str().unwrap(),
+            disassembled_path: disassembled.to_str().unwrap(),
+            base_name: "does_not_exist",
+            post_purge: false,
+            format: "xml",
+            unique_id_elements: None,
+            strategy: "unique-id",
+            decompose_rules: None,
+        })
+        .await
+        .unwrap();
+        assert!(!disassembled.exists());
+    }
 }

@@ -5,12 +5,13 @@ use crate::types::{UnifiedParseResult, XmlElementArrayMap, XmlElementParams};
 use serde_json::{Map, Value};
 
 fn is_nested_object(element: &Value) -> bool {
-    if let Some(obj) = element.as_object() {
-        obj.keys()
-            .any(|k| !k.starts_with('#') && !k.starts_with('@') && k != "?xml")
-    } else {
-        false
-    }
+    element
+        .as_object()
+        .map(|obj| {
+            obj.keys()
+                .any(|k| !k.starts_with('#') && !k.starts_with('@') && k != "?xml")
+        })
+        .unwrap_or(false)
 }
 
 pub async fn parse_element_unified(params: XmlElementParams<'_>) -> UnifiedParseResult {

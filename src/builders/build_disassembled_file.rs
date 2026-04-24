@@ -60,24 +60,19 @@ pub async fn build_disassembled_file(
         }
     }
 
-    let mut wrapped_xml: Value = Value::Object({
-        let mut m = Map::new();
-        m.insert(root_element_name.to_string(), Value::Object(inner));
-        m
-    });
+    let mut wrapped_inner = Map::new();
+    wrapped_inner.insert(root_element_name.to_string(), Value::Object(inner));
 
-    if let Some(decl) = xml_declaration {
-        if decl.is_object() {
-            let mut root = Map::new();
-            root.insert("?xml".to_string(), decl.clone());
-            if let Some(obj) = wrapped_xml.as_object() {
-                for (k, v) in obj {
-                    root.insert(k.clone(), v.clone());
-                }
-            }
-            wrapped_xml = Value::Object(root);
+    if let Some(decl) = xml_declaration.filter(|d| d.is_object()) {
+        let mut root = Map::new();
+        root.insert("?xml".to_string(), decl);
+        for (k, v) in wrapped_inner {
+            root.insert(k, v);
         }
+        wrapped_inner = root;
     }
+
+    let wrapped_xml = Value::Object(wrapped_inner);
 
     let output_string = if let Some(s) = transform_format(format, &wrapped_xml).await {
         s

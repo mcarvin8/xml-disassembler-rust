@@ -93,4 +93,21 @@ mod tests {
         let attrs = extract_root_attributes(&element);
         assert_eq!(attrs.get("@empty").and_then(|v| v.as_str()), Some(""));
     }
+
+    #[test]
+    fn attr_value_array_uses_serde_json_fallback() {
+        let element = json!({ "@list": [1, 2, 3] });
+        let attrs = extract_root_attributes(&element);
+        assert_eq!(attrs.get("@list").and_then(|v| v.as_str()), Some("[1,2,3]"));
+    }
+
+    #[test]
+    fn attr_value_object_uses_serde_json_fallback() {
+        let element = json!({ "@obj": { "k": "v" } });
+        let attrs = extract_root_attributes(&element);
+        assert_eq!(
+            attrs.get("@obj").and_then(|v| v.as_str()),
+            Some(r#"{"k":"v"}"#)
+        );
+    }
 }

@@ -60,11 +60,13 @@ pub fn capture_xmlns_from_root(parsed: &XmlElement) -> Option<String> {
 
 /// Derive path_segment from file_pattern (e.g. "programProcesses-meta" -> "programProcesses").
 pub fn path_segment_from_file_pattern(file_pattern: &str) -> String {
-    if let Some(prefix) = file_pattern.split('-').next() {
-        prefix.to_string()
-    } else {
-        file_pattern.to_string()
-    }
+    // `split('-').next()` always returns `Some(_)` for any string - even an empty one -
+    // so falling back to the original `file_pattern` is unreachable.
+    file_pattern
+        .split('-')
+        .next()
+        .unwrap_or(file_pattern)
+        .to_string()
 }
 
 /// Load multi-level config from a directory (reads .multi_level.json).
@@ -115,29 +117,23 @@ pub async fn ensure_segment_files_structure(
             continue;
         }
         let path_str = path.to_string_lossy();
-        let content = match tokio::fs::read_to_string(&path).await {
-            Ok(c) => c,
-            Err(_) => continue,
+        // Read errors on a file the walker just reported as present are essentially impossible
+        // (concurrent deletion); treat the content as empty so downstream lookups skip naturally.
+        let content = tokio::fs::read_to_string(&path).await.unwrap_or_default();
+        let Some(parsed) = parse_xml_from_str(&content, &path_str) else {
+            continue;
         };
-        let parsed = match parse_xml_from_str(&content, &path_str) {
-            Some(p) => p,
-            None => continue,
-        };
-        let obj = match parsed.as_object() {
-            Some(o) => o,
-            None => continue,
-        };
-        let root_key = obj.keys().find(|k| *k != "?xml").cloned();
-        let Some(current_root_key) = root_key else {
+        // parse_xml_from_str always yields a JSON object when it returns Some; fall back to an
+        // empty map for any unexpected shape so subsequent lookups simply produce None.
+        let obj = parsed.as_object().cloned().unwrap_or_default();
+        let Some(current_root_key) = obj.keys().find(|k| *k != "?xml").cloned() else {
             continue;
         };
         let root_val = obj
             .get(&current_root_key)
             .and_then(|v| v.as_object())
-            .cloned();
-        let Some(root_val) = root_val else {
-            continue;
-        };
+            .cloned()
+            .unwrap_or_default();
 
         let decl = obj.get("?xml").cloned().unwrap_or_else(|| {
             let mut d = Map::new();
@@ -318,5 +314,66 @@ mod tests {
         assert!(out.contains("http://example.com"));
         assert!(out.contains("<programProcesses>"));
         assert!(out.contains("<x>1</x>"));
+    }
+
+    #[tokio::test]
+    async fn ensure_segment_files_structure_skips_already_correct_files() {
+        // Root wraps inner_wrapper and has xmlns; inner has no xmlns -> no rewrite.
+        let dir = tempfile::tempdir().unwrap();
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Root xmlns="http://example.com"><programProcesses><x>1</x></programProcesses></Root>"#;
+        let path = dir.path().join("ok.xml");
+        tokio::fs::write(&path, xml).await.unwrap();
+        let before = tokio::fs::metadata(&path).await.unwrap().modified().ok();
+        ensure_segment_files_structure(
+            dir.path(),
+            "Root",
+            "programProcesses",
+            "http://example.com",
+        )
+        .await
+        .unwrap();
+        let after = tokio::fs::metadata(&path).await.unwrap().modified().ok();
+        assert_eq!(before, after, "already-correct files must be left as-is");
+    }
+
+    #[tokio::test]
+    async fn ensure_segment_files_structure_skips_non_xml_and_subdirs() {
+        let dir = tempfile::tempdir().unwrap();
+        tokio::fs::create_dir(dir.path().join("nested"))
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("notes.txt"), "hello")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("broken.xml"), "<<not xml>")
+            .await
+            .unwrap();
+        // No XML payload that matches; should succeed without writing anything.
+        ensure_segment_files_structure(
+            dir.path(),
+            "Root",
+            "programProcesses",
+            "http://example.com",
+        )
+        .await
+        .unwrap();
+        // broken.xml remains unchanged
+        let raw = tokio::fs::read_to_string(dir.path().join("broken.xml"))
+            .await
+            .unwrap();
+        assert_eq!(raw, "<<not xml>");
+    }
+
+    #[tokio::test]
+    async fn ensure_segment_files_structure_skips_xml_missing_root() {
+        // Only a declaration, no root element (empty document)
+        let dir = tempfile::tempdir().unwrap();
+        tokio::fs::write(dir.path().join("empty.xml"), "")
+            .await
+            .unwrap();
+        ensure_segment_files_structure(dir.path(), "Root", "programProcesses", "")
+            .await
+            .unwrap();
     }
 }

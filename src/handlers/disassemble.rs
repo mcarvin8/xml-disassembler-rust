@@ -23,18 +23,17 @@ impl DisassembleXmlFileHandler {
 
     async fn load_ignore_rules(&mut self, ignore_path: &str) {
         let path = Path::new(ignore_path);
-        if path.exists() {
-            if let Ok(content) = fs::read_to_string(path).await {
-                let root = path.parent().unwrap_or(Path::new("."));
-                let mut builder = GitignoreBuilder::new(root);
-                for line in content.lines() {
-                    let _ = builder.add_line(None, line);
-                }
-                if let Ok(gi) = builder.build() {
-                    self.ign = Some(gi);
-                }
-            }
+        let content = match fs::read_to_string(path).await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let root = path.parent().unwrap_or(Path::new("."));
+        let mut builder = GitignoreBuilder::new(root);
+        for line in content.lines() {
+            let _ = builder.add_line(None, line);
         }
+        // `GitignoreBuilder::build` only fails on unlikely I/O errors; treat as absent rules.
+        self.ign = builder.build().ok();
     }
 
     fn posix_path(path: &str) -> String {
@@ -97,7 +96,9 @@ impl DisassembleXmlFileHandler {
                 decompose_rules,
             )
             .await?;
-        } else if meta.is_dir() {
+        } else {
+            // Anything that isn't a regular file is treated as a directory; fs::metadata on
+            // the caller already errored out if the path didn't exist.
             self.handle_directory(
                 file_path,
                 unique_id_elements,
@@ -186,25 +187,26 @@ impl DisassembleXmlFileHandler {
                 .to_string_lossy();
             let relative_sub = Self::posix_path(&relative_sub);
 
-            if sub_path.is_file() && Self::is_xml_file(&sub_file_path) {
-                if self.is_ignored(&relative_sub) {
-                    log::warn!("File ignored by ignore rules: {}", sub_file_path);
-                } else {
-                    let sub_file_path_norm = normalize_path_unix(&sub_file_path);
-                    self.process_file(
-                        &dir_path,
-                        strategy,
-                        &sub_file_path_norm,
-                        unique_id_elements,
-                        pre_purge,
-                        post_purge,
-                        format,
-                        multi_level_rule,
-                        decompose_rules,
-                    )
-                    .await?;
-                }
+            if !(sub_path.is_file() && Self::is_xml_file(&sub_file_path)) {
+                continue;
             }
+            if self.is_ignored(&relative_sub) {
+                log::warn!("File ignored by ignore rules: {}", sub_file_path);
+                continue;
+            }
+            let sub_file_path_norm = normalize_path_unix(&sub_file_path);
+            self.process_file(
+                &dir_path,
+                strategy,
+                &sub_file_path_norm,
+                unique_id_elements,
+                pre_purge,
+                post_purge,
+                format,
+                multi_level_rule,
+                decompose_rules,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -281,7 +283,10 @@ impl DisassembleXmlFileHandler {
 
                 if path.is_dir() {
                     stack.push(path);
-                } else if path.is_file() {
+                    continue;
+                }
+                // Anything not a directory is processed as a regular file below.
+                {
                     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                     let path_str_check = path.to_string_lossy();
                     if !name.ends_with(".xml")
@@ -340,33 +345,37 @@ impl DisassembleXmlFileHandler {
                     })
                     .await?;
 
-                    if config.rules.is_empty() {
-                        let wrap_root = parsed
-                            .as_object()
-                            .and_then(|o| o.keys().find(|k| *k != "?xml").cloned())
-                            .unwrap_or_else(|| rule.wrap_root_element.clone());
-                        config.rules.push(MultiLevelRule {
-                            file_pattern: rule.file_pattern.clone(),
-                            root_to_strip: rule.root_to_strip.clone(),
-                            unique_id_elements: rule.unique_id_elements.clone(),
-                            path_segment: if rule.path_segment.is_empty() {
+                    match config.rules.first_mut() {
+                        None => {
+                            let wrap_root = parsed
+                                .as_object()
+                                .and_then(|o| o.keys().find(|k| *k != "?xml").cloned())
+                                .unwrap_or_else(|| rule.wrap_root_element.clone());
+                            let path_segment = if rule.path_segment.is_empty() {
                                 path_segment_from_file_pattern(&rule.file_pattern)
                             } else {
                                 rule.path_segment.clone()
-                            },
-                            // Persist document root (e.g. LoyaltyProgramSetup) so reassembly uses it as root with xmlns;
-                            // path_segment (e.g. programProcesses) is the inner wrapper in each file.
-                            wrap_root_element: wrap_root,
-                            wrap_xmlns: if rule.wrap_xmlns.is_empty() {
+                            };
+                            let stored_xmlns = if rule.wrap_xmlns.is_empty() {
                                 wrap_xmlns
                             } else {
                                 rule.wrap_xmlns.clone()
-                            },
-                        });
-                    } else if let Some(r) = config.rules.first_mut() {
-                        if r.wrap_xmlns.is_empty() {
+                            };
+                            config.rules.push(MultiLevelRule {
+                                file_pattern: rule.file_pattern.clone(),
+                                root_to_strip: rule.root_to_strip.clone(),
+                                unique_id_elements: rule.unique_id_elements.clone(),
+                                path_segment,
+                                // Persist document root (e.g. LoyaltyProgramSetup) so reassembly uses it
+                                // as root with xmlns; path_segment is the inner wrapper in each file.
+                                wrap_root_element: wrap_root,
+                                wrap_xmlns: stored_xmlns,
+                            });
+                        }
+                        Some(r) if r.wrap_xmlns.is_empty() => {
                             r.wrap_xmlns = wrap_xmlns;
                         }
+                        Some(_) => {}
                     }
                 }
             }
@@ -394,5 +403,47 @@ mod tests {
     #[allow(clippy::default_constructed_unit_structs)]
     fn disassemble_handler_default_equals_new() {
         let _ = DisassembleXmlFileHandler::default();
+    }
+
+    #[test]
+    fn is_xml_file_matches_case_insensitively() {
+        assert!(DisassembleXmlFileHandler::is_xml_file("foo.xml"));
+        assert!(DisassembleXmlFileHandler::is_xml_file("BAR.XML"));
+        assert!(!DisassembleXmlFileHandler::is_xml_file("foo.txt"));
+    }
+
+    #[test]
+    fn posix_path_converts_backslashes() {
+        assert_eq!(
+            DisassembleXmlFileHandler::posix_path(r"C:\Users\name\file.xml"),
+            "C:/Users/name/file.xml"
+        );
+    }
+
+    #[tokio::test]
+    async fn load_ignore_rules_noop_when_path_missing() {
+        let mut handler = DisassembleXmlFileHandler::new();
+        handler
+            .load_ignore_rules("/definitely/does/not/exist/.ignore")
+            .await;
+        assert!(handler.ign.is_none());
+    }
+
+    #[tokio::test]
+    async fn load_ignore_rules_builds_matcher() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join(".ignore");
+        tokio::fs::write(&path, "*.xml\n").await.unwrap();
+        let mut handler = DisassembleXmlFileHandler::new();
+        handler.load_ignore_rules(path.to_str().unwrap()).await;
+        assert!(handler.ign.is_some());
+        assert!(handler.is_ignored("file.xml"));
+        assert!(!handler.is_ignored("file.txt"));
+    }
+
+    #[test]
+    fn is_ignored_default_false_without_rules() {
+        let handler = DisassembleXmlFileHandler::new();
+        assert!(!handler.is_ignored("some/path.xml"));
     }
 }

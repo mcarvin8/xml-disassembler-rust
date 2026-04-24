@@ -209,19 +209,15 @@ fn build_xml_from_object(
         (None, root_key, root_value)
     };
 
-    if declaration.is_some() {
-        if let Some(decl) = declaration {
-            if let Some(obj) = decl.as_object() {
-                let version = obj
-                    .get("@version")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("1.0");
-                let encoding = obj.get("@encoding").and_then(|v| v.as_str());
-                let standalone = obj.get("@standalone").and_then(|v| v.as_str());
-                writer.write_event(Event::Decl(BytesDecl::new(version, encoding, standalone)))?;
-                writer.write_event(Event::Text(BytesText::new("\n")))?;
-            }
-        }
+    if let Some(obj) = declaration.and_then(|d| d.as_object()) {
+        let version = obj
+            .get("@version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("1.0");
+        let encoding = obj.get("@encoding").and_then(|v| v.as_str());
+        let standalone = obj.get("@standalone").and_then(|v| v.as_str());
+        writer.write_event(Event::Decl(BytesDecl::new(version, encoding, standalone)))?;
+        writer.write_event(Event::Text(BytesText::new("\n")))?;
     }
 
     write_element(&mut writer, &root_key, &root_value, 0)?;

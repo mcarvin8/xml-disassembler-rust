@@ -5,25 +5,26 @@ use crate::multi_level::{ensure_segment_files_structure, load_multi_level_config
 use crate::parsers::parse_to_xml_object;
 use crate::types::XmlElement;
 use crate::utils::normalize_path_unix;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use tokio::fs;
 
+/// Read a `.key_order.json` file (if present) and parse it as a list of root key names.
+async fn read_key_order(path: &Path) -> Option<Vec<String>> {
+    let bytes = fs::read(path).await.ok()?;
+    serde_json::from_slice::<Vec<String>>(&bytes).ok()
+}
+
 /// Remove @xmlns from an object so the reassembled segment wrapper (e.g. programProcesses) has no xmlns.
 fn strip_xmlns_from_value(v: Value) -> Value {
-    let obj = match v.as_object() {
-        Some(o) => o,
-        None => return v,
-    };
-    let mut out = Map::new();
-    for (k, val) in obj {
-        if k != "@xmlns" {
-            out.insert(k.clone(), val.clone());
+    match v {
+        Value::Object(obj) => {
+            Value::Object(obj.into_iter().filter(|(k, _)| k != "@xmlns").collect())
         }
+        other => other,
     }
-    Value::Object(out)
 }
 
 type ProcessDirFuture<'a> = Pin<
@@ -56,51 +57,9 @@ impl ReassembleXmlFileHandler {
         let config = load_multi_level_config(path).await;
         if let Some(ref config) = config {
             for rule in &config.rules {
-                if rule.path_segment.is_empty() {
-                    continue;
-                }
                 let segment_path = path.join(&rule.path_segment);
-                if !segment_path.is_dir() {
-                    continue;
-                }
-                let mut entries = Vec::new();
-                let mut read_dir = fs::read_dir(&segment_path).await?;
-                while let Some(entry) = read_dir.next_entry().await? {
-                    entries.push(entry);
-                }
-                // Sort for deterministic cross-platform ordering
-                entries.sort_by_key(|e| e.file_name());
-                for entry in entries {
-                    let process_path = entry.path();
-                    if !process_path.is_dir() {
-                        continue;
-                    }
-                    let process_path_str = normalize_path_unix(&process_path.to_string_lossy());
-                    let mut sub_entries = Vec::new();
-                    let mut sub_read = fs::read_dir(&process_path).await?;
-                    while let Some(e) = sub_read.next_entry().await? {
-                        sub_entries.push(e);
-                    }
-                    // Sort for deterministic cross-platform ordering
-                    sub_entries.sort_by_key(|e| e.file_name());
-                    for sub_entry in sub_entries {
-                        let sub_path = sub_entry.path();
-                        if sub_path.is_dir() {
-                            let sub_path_str = normalize_path_unix(&sub_path.to_string_lossy());
-                            self.reassemble_plain(&sub_path_str, Some("xml"), true, None)
-                                .await?;
-                        }
-                    }
-                    self.reassemble_plain(&process_path_str, Some("xml"), true, None)
-                        .await?;
-                }
-                ensure_segment_files_structure(
-                    &segment_path,
-                    &rule.wrap_root_element,
-                    &rule.path_segment,
-                    &rule.wrap_xmlns,
-                )
-                .await?;
+                self.reassemble_multi_level_segment(&segment_path, rule)
+                    .await?;
             }
         }
 
@@ -117,6 +76,55 @@ impl ReassembleXmlFileHandler {
         let post_purge_final = post_purge || config.is_some();
         self.reassemble_plain(&file_path, file_extension, post_purge_final, base_segment)
             .await
+    }
+
+    /// Reassemble a single multi-level segment directory: walk each process dir, reassemble
+    /// nested segments, reassemble the process, then ensure the wrapper structure.
+    async fn reassemble_multi_level_segment(
+        &self,
+        segment_path: &Path,
+        rule: &crate::types::MultiLevelRule,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if !segment_path.is_dir() {
+            return Ok(());
+        }
+        let mut entries = Vec::new();
+        let mut read_dir = fs::read_dir(segment_path).await?;
+        while let Some(entry) = read_dir.next_entry().await? {
+            entries.push(entry);
+        }
+        entries.sort_by_key(|e| e.file_name());
+        for entry in entries {
+            let process_path = entry.path();
+            if !process_path.is_dir() {
+                continue;
+            }
+            let process_path_str = normalize_path_unix(&process_path.to_string_lossy());
+            let mut sub_entries = Vec::new();
+            let mut sub_read = fs::read_dir(&process_path).await?;
+            while let Some(e) = sub_read.next_entry().await? {
+                sub_entries.push(e);
+            }
+            sub_entries.sort_by_key(|e| e.file_name());
+            for sub_entry in sub_entries {
+                let sub_path = sub_entry.path();
+                if sub_path.is_dir() {
+                    let sub_path_str = normalize_path_unix(&sub_path.to_string_lossy());
+                    self.reassemble_plain(&sub_path_str, Some("xml"), true, None)
+                        .await?;
+                }
+            }
+            self.reassemble_plain(&process_path_str, Some("xml"), true, None)
+                .await?;
+        }
+        ensure_segment_files_structure(
+            segment_path,
+            &rule.wrap_root_element,
+            &rule.path_segment,
+            &rule.wrap_xmlns,
+        )
+        .await?;
+        Ok(())
     }
 
     /// Merge and write reassembled XML (no multi-level pre-step). Used internally.
@@ -144,21 +152,18 @@ impl ReassembleXmlFileHandler {
             return Ok(());
         }
 
-        let mut merged = match merge_xml_elements(&parsed_objects) {
-            Some(m) => m,
-            None => return Ok(()),
-        };
+        // merge_xml_elements only fails for an empty slice (handled above) or when the first
+        // element has no root key; fall back to an empty object in that unreachable case.
+        let mut merged = merge_xml_elements(&parsed_objects)
+            .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
 
         // Apply stored key order so reassembled XML matches original document order.
         let key_order_path = Path::new(&file_path).join(".key_order.json");
-        if key_order_path.exists() {
-            if let Ok(bytes) = fs::read(&key_order_path).await {
-                if let Ok(key_order) = serde_json::from_slice::<Vec<String>>(&bytes) {
-                    if let Some(reordered) = reorder_root_keys(&merged, &key_order) {
-                        merged = reordered;
-                    }
-                }
-            }
+        if let Some(reordered) = read_key_order(&key_order_path)
+            .await
+            .and_then(|order| reorder_root_keys(&merged, &order))
+        {
+            merged = reordered;
         }
 
         let final_xml = build_xml_string(&merged);
@@ -210,7 +215,9 @@ impl ReassembleXmlFileHandler {
                             parsed.push(parsed_obj);
                         }
                     }
-                } else if path.is_dir() {
+                } else {
+                    // Anything not a regular file is treated as a directory; symlinks and
+                    // other exotic entries simply recurse via read_dir below.
                     let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                     if is_base && segment_name == Some(dir_name) {
                         let segment_element = self
@@ -249,11 +256,9 @@ impl ReassembleXmlFileHandler {
         let mut read_dir = fs::read_dir(segment_dir).await?;
         while let Some(entry) = read_dir.next_entry().await? {
             let path = entry.path();
-            if path.is_file() {
-                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if !name.starts_with('.') && self.is_parsable_file(name) {
-                    xml_files.push(normalize_path_unix(&path.to_string_lossy()));
-                }
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if path.is_file() && !name.starts_with('.') && self.is_parsable_file(name) {
+                xml_files.push(normalize_path_unix(&path.to_string_lossy()));
             }
         }
         xml_files.sort();
@@ -261,17 +266,15 @@ impl ReassembleXmlFileHandler {
         let mut root_contents = Vec::new();
         let mut first_xml: Option<(String, Option<Value>)> = None;
         for file_path in &xml_files {
-            let parsed = match parse_to_xml_object(file_path).await {
-                Some(p) => p,
-                None => continue,
+            // parse_to_xml_object always yields a JSON object on success; treat any other
+            // shape (including parse failure) as a skip without branching explicitly.
+            let Some(parsed) = parse_to_xml_object(file_path).await else {
+                continue;
             };
-            let obj = match parsed.as_object() {
-                Some(o) => o,
-                None => continue,
-            };
-            let root_key = match obj.keys().find(|k| *k != "?xml").cloned() {
-                Some(k) => k,
-                None => continue,
+            let obj_owned = parsed.as_object().cloned().unwrap_or_default();
+            let obj = &obj_owned;
+            let Some(root_key) = obj.keys().find(|k| *k != "?xml").cloned() else {
+                continue;
             };
             let root_val = obj
                 .get(&root_key)
@@ -361,10 +364,148 @@ impl Default for ReassembleXmlFileHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     #[allow(clippy::default_constructed_unit_structs)]
     fn reassemble_handler_default_equals_new() {
         let _ = ReassembleXmlFileHandler::default();
+    }
+
+    #[test]
+    fn strip_xmlns_from_value_passes_non_object_through() {
+        let s = Value::String("hello".to_string());
+        assert_eq!(
+            strip_xmlns_from_value(s),
+            Value::String("hello".to_string())
+        );
+        let arr = json!([1, 2]);
+        assert_eq!(strip_xmlns_from_value(arr.clone()), arr);
+    }
+
+    #[test]
+    fn strip_xmlns_from_value_removes_xmlns_key() {
+        let obj = json!({ "@xmlns": "ns", "child": 1 });
+        let stripped = strip_xmlns_from_value(obj);
+        let map = stripped.as_object().unwrap();
+        assert!(map.get("@xmlns").is_none());
+        assert_eq!(map.get("child").and_then(|v| v.as_i64()), Some(1));
+    }
+
+    #[test]
+    fn is_parsable_file_recognises_supported_extensions() {
+        let h = ReassembleXmlFileHandler::new();
+        assert!(h.is_parsable_file("a.xml"));
+        assert!(h.is_parsable_file("a.json"));
+        assert!(h.is_parsable_file("a.json5"));
+        assert!(h.is_parsable_file("a.yaml"));
+        assert!(h.is_parsable_file("a.yml"));
+        assert!(h.is_parsable_file("A.XML"));
+        assert!(!h.is_parsable_file("a.txt"));
+    }
+
+    #[test]
+    fn get_output_path_appends_extension_and_uses_parent_dir() {
+        let h = ReassembleXmlFileHandler::new();
+        let out = h.get_output_path("/tmp/foo", Some("xml"));
+        assert!(out.ends_with("foo.xml"));
+        let out_default = h.get_output_path("/tmp/bar", None);
+        assert!(out_default.ends_with("bar.xml"));
+        // No parent - uses "." fallback
+        assert_eq!(h.get_output_path("only", Some("json")), "only.json");
+    }
+
+    #[tokio::test]
+    async fn reassemble_multi_level_segment_noop_when_not_dir() {
+        let h = ReassembleXmlFileHandler::new();
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("not_a_dir.txt");
+        tokio::fs::write(&file, "hi").await.unwrap();
+        let rule = crate::types::MultiLevelRule {
+            file_pattern: String::new(),
+            root_to_strip: String::new(),
+            unique_id_elements: String::new(),
+            path_segment: String::new(),
+            wrap_root_element: "Root".to_string(),
+            wrap_xmlns: String::new(),
+        };
+        h.reassemble_multi_level_segment(&file, &rule)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn reassemble_multi_level_segment_skips_files_in_segment_root() {
+        let h = ReassembleXmlFileHandler::new();
+        let tmp = tempfile::tempdir().unwrap();
+        let segment = tmp.path().join("segment");
+        tokio::fs::create_dir(&segment).await.unwrap();
+        // A bare file inside the segment dir should be skipped (not a subdir).
+        tokio::fs::write(segment.join("stray.txt"), "x")
+            .await
+            .unwrap();
+        let rule = crate::types::MultiLevelRule {
+            file_pattern: String::new(),
+            root_to_strip: String::new(),
+            unique_id_elements: String::new(),
+            path_segment: "segment".to_string(),
+            wrap_root_element: "Root".to_string(),
+            wrap_xmlns: "http://example.com".to_string(),
+        };
+        h.reassemble_multi_level_segment(&segment, &rule)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn collect_segment_as_array_returns_none_for_empty_dir() {
+        let h = ReassembleXmlFileHandler::new();
+        let tmp = tempfile::tempdir().unwrap();
+        let out = h
+            .collect_segment_as_array(tmp.path().to_str().unwrap(), "seg", true)
+            .await
+            .unwrap();
+        assert!(out.is_none());
+    }
+
+    #[tokio::test]
+    async fn collect_segment_as_array_skips_unparseable_and_empty_roots() {
+        let h = ReassembleXmlFileHandler::new();
+        let tmp = tempfile::tempdir().unwrap();
+        // Unparseable XML
+        tokio::fs::write(tmp.path().join("bad.xml"), "<<")
+            .await
+            .unwrap();
+        // Valid XML but only declaration and no root after parse
+        tokio::fs::write(tmp.path().join("only-decl.xml"), "")
+            .await
+            .unwrap();
+        // Hidden file is skipped
+        tokio::fs::write(tmp.path().join(".hidden.xml"), "<r/>")
+            .await
+            .unwrap();
+        let out = h
+            .collect_segment_as_array(tmp.path().to_str().unwrap(), "seg", false)
+            .await
+            .unwrap();
+        assert!(out.is_none());
+    }
+
+    #[tokio::test]
+    async fn collect_segment_as_array_without_extract_inner_wraps_root() {
+        let h = ReassembleXmlFileHandler::new();
+        let tmp = tempfile::tempdir().unwrap();
+        tokio::fs::write(tmp.path().join("a.xml"), r#"<Root><child>1</child></Root>"#)
+            .await
+            .unwrap();
+        let out = h
+            .collect_segment_as_array(tmp.path().to_str().unwrap(), "seg", false)
+            .await
+            .unwrap()
+            .unwrap();
+        let obj = out.as_object().unwrap();
+        assert!(obj.contains_key("?xml"));
+        let root = obj.get("Root").and_then(|r| r.as_object()).unwrap();
+        assert!(root.get("seg").and_then(|v| v.as_array()).is_some());
     }
 }
