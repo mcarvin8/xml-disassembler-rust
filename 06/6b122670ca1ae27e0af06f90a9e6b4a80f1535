@@ -1,0 +1,51 @@
+src/builders/build_disassembled_files.rs
+  b6bac79ca5bc26f0 4,15,19,52-61,82-86,88-89,114,118-121,289-296,334,336-337,363-364,369-454
+src/cli.rs
+  b6bac79ca5bc26f0 1-602
+src/handlers/reassemble.rs
+  b6bac79ca5bc26f0 8,14-19,22-24,26,61-62,81-129,155-158,162-166,218-220,259-261,269-272,274-277,367,374-497,499-509
+src/parsers/parse_xml_cdata.rs
+  b6bac79ca5bc26f0 22-60,67-69,73,104-116,118,121-122,125-136,172-173,175-181,196-202,225,247-265,428-469
+src/lib.rs
+  b6bac79ca5bc26f0 4
+src/builders/extract_root_attributes.rs
+  b6bac79ca5bc26f0 96-112
+src/builders/build_disassembled_file.rs
+  b6bac79ca5bc26f0 63-64,66-70,72,75
+src/handlers/disassemble.rs
+  b6bac79ca5bc26f0 26-33,35-36,99-101,190-195,197-209,286-289,348-354,358-359,363-375,378,407-448
+src/parsers/parse_to_xml_object.rs
+  b6bac79ca5bc26f0 3,11-17
+src/builders/merge_xml_elements.rs
+  b6bac79ca5bc26f0 220-295
+src/builders/build_xml_string.rs
+  b6bac79ca5bc26f0 212-220
+src/parsers/parse_element.rs
+  b6bac79ca5bc26f0 8-14
+src/parsers/parse_unique_id.rs
+  b6bac79ca5bc26f0 33-37,56-58,110-142
+src/multi_level.rs
+  b6bac79ca5bc26f0 63-69,120-124,126-129,135-136,318-345,347-378
+src/main.rs
+  b6bac79ca5bc26f0 6-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "066b122670ca1ae27e0af06f90a9e6b4a80f1535",
+  "prompts": {
+    "b6bac79ca5bc26f0": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f795eb4f-26cd-49b5-8abf-1c98af921ba2",
+        "model": "auto-high"
+      },
+      "human_author": "Matt Carvin",
+      "messages": [],
+      "total_additions": 1502,
+      "total_deletions": 711,
+      "accepted_lines": 1439,
+      "overriden_lines": 3
+    }
+  }
+}
