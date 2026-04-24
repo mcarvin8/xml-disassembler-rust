@@ -1,0 +1,25 @@
+src/builders/merge_xml_elements.rs
+  c4e56cb71e33a077 107-111,118-122,124,303-333
+src/handlers/reassemble.rs
+  c4e56cb71e33a077 155-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "70363b205c07468346ac0879abe672785e014fc9",
+  "prompts": {
+    "c4e56cb71e33a077": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e9a9c897-92d1-4bfe-80d8-0b6e2427f90d",
+        "model": "auto-high"
+      },
+      "human_author": "Matt Carvin",
+      "messages": [],
+      "total_additions": 54,
+      "total_deletions": 8,
+      "accepted_lines": 52,
+      "overriden_lines": 0
+    }
+  }
+}
