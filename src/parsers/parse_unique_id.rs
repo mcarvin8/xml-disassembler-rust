@@ -30,12 +30,11 @@ fn value_as_string(value: &Value) -> Option<String> {
     if let Some(s) = value.as_str() {
         return Some(s.to_string());
     }
-    if let Some(obj) = value.as_object() {
-        if let Some(text) = obj.get("#text").and_then(|v| v.as_str()) {
-            return Some(text.to_string());
-        }
-    }
-    None
+    value
+        .as_object()
+        .and_then(|obj| obj.get("#text"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }
 
 fn find_direct_field_match(element: &XmlElement, field_names: &[&str]) -> Option<String> {
@@ -54,10 +53,9 @@ fn find_nested_field_match(element: &XmlElement, unique_id_elements: &str) -> Op
     let obj = element.as_object()?;
     for (_, child) in obj {
         if is_object(child) {
-            let result = parse_unique_id_element(child, Some(unique_id_elements));
-            if !result.is_empty() {
-                return Some(result);
-            }
+            // parse_unique_id_element always returns a non-empty string (falls back to a hash),
+            // so the first nested object match is sufficient.
+            return Some(parse_unique_id_element(child, Some(unique_id_elements)));
         }
     }
     None
@@ -107,6 +105,39 @@ mod tests {
             }
         });
         assert_eq!(parse_unique_id_element(&el, Some("name")), "NestedName");
+    }
+
+    #[test]
+    fn value_as_string_returns_none_for_non_string_non_text_objects() {
+        // Directly named field exists but value is neither a string nor an object with #text.
+        // Exercises the None-return path inside value_as_string plus the "no match, move on"
+        // path inside find_direct_field_match.
+        let el = json!({ "name": { "other": "xxx" } });
+        let id = parse_unique_id_element(&el, Some("name"));
+        // Falls through to the 8-char short-hash fallback.
+        assert_eq!(id.len(), 8);
+    }
+
+    #[test]
+    fn falls_back_to_hash_when_no_match_and_no_nested_object() {
+        // No direct match and no nested object match → hash fallback.
+        let el = json!({ "a": "string", "b": "another" });
+        let id = parse_unique_id_element(&el, Some("name"));
+        assert_eq!(id.len(), 8);
+    }
+
+    #[test]
+    fn hash_fallback_when_unique_id_elements_is_none() {
+        let el = json!({ "a": "b" });
+        let id = parse_unique_id_element(&el, None);
+        assert_eq!(id.len(), 8);
+    }
+
+    #[test]
+    fn non_object_element_returns_hash() {
+        let el = json!("just-a-string");
+        let id = parse_unique_id_element(&el, Some("name"));
+        assert_eq!(id.len(), 8);
     }
 
     #[test]

@@ -217,6 +217,83 @@ mod tests {
     }
 
     #[test]
+    fn merge_elements_with_non_object_or_missing_root_skipped() {
+        // First element supplies the root key. Second element is a primitive (skipped).
+        // Third element is an object but lacks the root key (skipped). Fourth element
+        // has the root key but the root value is a primitive (skipped).
+        let a = json!({ "Root": { "item": "a" } });
+        let b = json!("not-an-object");
+        let c = json!({ "Other": { "item": "c" } });
+        let d = json!({ "Root": "primitive" });
+        let merged = merge_xml_elements(&[a, b, c, d]).unwrap();
+        let root = merged.get("Root").and_then(|v| v.as_object()).unwrap();
+        assert_eq!(root.get("item").and_then(|v| v.as_str()), Some("a"));
+    }
+
+    #[test]
+    fn merge_primitive_value_does_not_overwrite_existing() {
+        // First has primitive "item"; second also has primitive "item" - kept first
+        let a = json!({ "Root": { "item": "first" } });
+        let b = json!({ "Root": { "item": "second" } });
+        let merged = merge_xml_elements(&[a, b]).unwrap();
+        let item = merged
+            .get("Root")
+            .and_then(|r| r.get("item"))
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert_eq!(item, "first");
+    }
+
+    #[test]
+    fn merge_array_value_when_target_key_absent_sets_array() {
+        // Target lacks "item"; second element provides item as array
+        let a = json!({ "Root": { "other": "x" } });
+        let b = json!({ "Root": { "item": [ { "x": "1" } ] } });
+        let merged = merge_xml_elements(&[a, b]).unwrap();
+        let items = merged
+            .get("Root")
+            .and_then(|r| r.get("item"))
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn merge_array_value_extends_existing_array() {
+        // Both elements have item as array → extend
+        let a = json!({ "Root": { "item": [ { "x": "1" } ] } });
+        let b = json!({ "Root": { "item": [ { "x": "2" }, { "x": "3" } ] } });
+        let merged = merge_xml_elements(&[a, b]).unwrap();
+        let items = merged
+            .get("Root")
+            .and_then(|r| r.get("item"))
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert_eq!(items.len(), 3);
+    }
+
+    #[test]
+    fn reorder_root_keys_returns_none_for_invalid_inputs() {
+        // Not an object
+        assert!(reorder_root_keys(&json!("string"), &["a".into()]).is_none());
+        // No root key (only declaration)
+        assert!(reorder_root_keys(&json!({ "?xml": {} }), &["a".into()]).is_none());
+        // Root value not object
+        let el = json!({ "Root": "primitive" });
+        assert!(reorder_root_keys(&el, &["a".into()]).is_none());
+    }
+
+    #[test]
+    fn reorder_root_keys_without_declaration_omits_it() {
+        let el = json!({ "Root": { "b": "2", "a": "1" } });
+        let out = reorder_root_keys(&el, &["a".into(), "b".into()]).unwrap();
+        assert!(out.get("?xml").is_none());
+        let root = out.get("Root").and_then(|v| v.as_object()).unwrap();
+        let keys: Vec<_> = root.keys().cloned().collect();
+        assert_eq!(keys, ["a", "b"]);
+    }
+
+    #[test]
     fn merge_array_value_when_target_has_key_non_array_coalesces_into_array() {
         // First element has "item" as object; second has "item" as array → coalesce to [existing, ...new]
         let a = json!({ "Root": { "item": { "x": "1" } } });

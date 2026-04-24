@@ -19,19 +19,58 @@ fn append_entity_to_raw(ref_: &quick_xml::events::BytesRef<'_>, raw: &mut String
     raw.push(';');
 }
 
+/// Append CDATA content to the current element's "#cdata" buffer. Silently noops when the
+/// stack is empty; quick-xml rejects CDATA outside an element before reaching this point.
+fn append_cdata_to_current(stack: &mut [(String, Map<String, Value>)], bytes: &[u8]) {
+    let content = String::from_utf8_lossy(bytes);
+    if let Some((_, elem)) = stack.last_mut() {
+        let merged = match elem.get("#cdata").and_then(|v| v.as_str()) {
+            Some(prev) => format!("{}{}", prev, content),
+            None => content.into_owned(),
+        };
+        elem.insert("#cdata".to_string(), Value::String(merged));
+    }
+}
+
+/// Attach a finished child element (from Event::End or Event::Empty) to its parent -
+/// or record it as the root when the stack is empty.
+fn attach_child_to_parent(
+    stack: &mut [(String, Map<String, Value>)],
+    name: String,
+    value: Value,
+    root_name: &mut Option<String>,
+    root_value: &mut Option<Value>,
+) {
+    let Some((_, parent)) = stack.last_mut() else {
+        *root_name = Some(name);
+        *root_value = Some(value);
+        return;
+    };
+    match parent.get_mut(&name) {
+        Some(Value::Array(arr)) => arr.push(value),
+        Some(_) => {
+            let prev = parent.remove(&name).expect("key checked above");
+            parent.insert(name, Value::Array(vec![prev, value]));
+        }
+        None => {
+            parent.insert(name, value);
+        }
+    }
+}
+
 /// Parse text content - match quickxml_to_serde behavior for type inference.
 fn parse_text_value(text: &str, leading_zero_as_string: bool) -> Value {
     let text = text.trim();
     if text.is_empty() {
         return Value::String(String::new());
     }
-    if leading_zero_as_string && text.starts_with('0') && (text == "0" || text.len() > 1) {
+    // When leading-zero-as-string is on, any 0-prefixed numeric (including "0")
+    // stays a string - this subsumes the u64 leading-zero branch below.
+    if leading_zero_as_string && text.starts_with('0') {
         return Value::String(text.to_string());
     }
     if let Ok(v) = text.parse::<u64>() {
-        if !leading_zero_as_string || !text.starts_with('0') || text == "0" {
-            return Value::Number(Number::from(v));
-        }
+        return Value::Number(Number::from(v));
     }
     if let Ok(v) = text.parse::<f64>() {
         if !text.starts_with('0') || text.starts_with("0.") {
@@ -62,26 +101,39 @@ fn flush_text_buffer(
     }
     let val_raw = Value::String(text.clone());
     let val_parsed = parse_text_value(&text, true);
-    if let Some((_, elem)) = stack.last_mut() {
-        if is_after_comment {
-            if let Some(prev) = elem.get_mut("#text-tail") {
-                if let (Some(a), Some(b)) = (prev.as_str(), val_raw.as_str()) {
-                    *prev = Value::String(format!("{}{}", a, b));
+    let Some((_, elem)) = stack.last_mut() else {
+        return;
+    };
+    if is_after_comment {
+        match elem
+            .get_mut("#text-tail")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+        {
+            Some(prev) => {
+                if let Some(b) = val_raw.as_str() {
+                    elem.insert(
+                        "#text-tail".to_string(),
+                        Value::String(format!("{}{}", prev, b)),
+                    );
                 }
-            } else {
+            }
+            None => {
                 elem.insert("#text-tail".to_string(), val_raw);
             }
-        } else if elem.contains_key("#cdata") {
-            elem.insert("#text".to_string(), val_raw);
-        } else if elem.contains_key("#text") {
-            if let Some(prev) = elem.get_mut("#text") {
-                if let (Some(a), Some(b)) = (prev.as_str(), val_parsed.as_str()) {
-                    *prev = Value::String(format!("{}{}", a, b));
-                }
-            }
-        } else {
-            elem.insert("#text".to_string(), val_raw);
         }
+    } else if elem.contains_key("#cdata") {
+        elem.insert("#text".to_string(), val_raw);
+    } else if let Some(prev) = elem
+        .get("#text")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+    {
+        if let Some(b) = val_parsed.as_str() {
+            elem.insert("#text".to_string(), Value::String(format!("{}{}", prev, b)));
+        }
+    } else {
+        elem.insert("#text".to_string(), val_raw);
     }
 }
 
@@ -117,27 +169,16 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
             Ok(Event::End(_e)) => {
                 flush_text_buffer(&mut text_buffer, &mut stack, text_buffer_after_comment);
                 text_buffer_after_comment = false;
+                // `stack.pop()` only returns None on malformed XML, which quick-xml rejects
+                // before reaching here; silently skip when it does.
                 if let Some((popped_name, elem)) = stack.pop() {
-                    let value = if elem.is_empty() {
-                        Value::Object(Map::new())
-                    } else {
-                        Value::Object(elem)
-                    };
-                    if let Some((_, parent)) = stack.last_mut() {
-                        if let Some(existing) = parent.get_mut(&popped_name) {
-                            if let Some(arr) = existing.as_array_mut() {
-                                arr.push(value);
-                            } else {
-                                let prev = parent.remove(&popped_name).unwrap();
-                                parent.insert(popped_name, Value::Array(vec![prev, value]));
-                            }
-                        } else {
-                            parent.insert(popped_name, value);
-                        }
-                    } else {
-                        root_name = Some(popped_name);
-                        root_value = Some(value);
-                    }
+                    attach_child_to_parent(
+                        &mut stack,
+                        popped_name,
+                        Value::Object(elem),
+                        &mut root_name,
+                        &mut root_value,
+                    );
                 }
             }
             Ok(Event::Empty(e)) => {
@@ -152,26 +193,13 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
                         .unwrap_or_default();
                     attrs.insert(key, Value::String(val.to_string()));
                 }
-                let value = if attrs.is_empty() {
-                    Value::Object(Map::new())
-                } else {
-                    Value::Object(attrs)
-                };
-                if let Some((_, parent)) = stack.last_mut() {
-                    if let Some(existing) = parent.get_mut(&name) {
-                        if let Some(arr) = existing.as_array_mut() {
-                            arr.push(value);
-                        } else {
-                            let prev = parent.remove(&name).unwrap();
-                            parent.insert(name, Value::Array(vec![prev, value]));
-                        }
-                    } else {
-                        parent.insert(name, value);
-                    }
-                } else {
-                    root_name = Some(name);
-                    root_value = Some(value);
-                }
+                attach_child_to_parent(
+                    &mut stack,
+                    name,
+                    Value::Object(attrs),
+                    &mut root_name,
+                    &mut root_value,
+                );
             }
             Ok(Event::Text(e)) => {
                 let text = e.decode().unwrap_or_default();
@@ -194,17 +222,7 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
             Ok(Event::CData(e)) => {
                 flush_text_buffer(&mut text_buffer, &mut stack, text_buffer_after_comment);
                 text_buffer_after_comment = false;
-                // CDATA content is already raw (unescaped) - convert bytes to string
-                let content = String::from_utf8_lossy(e.as_ref()).to_string();
-                if let Some((_, elem)) = stack.last_mut() {
-                    if let Some(existing) = elem.get_mut("#cdata") {
-                        if let Some(s) = existing.as_str() {
-                            *existing = Value::String(format!("{}{}", s, content));
-                        }
-                    } else {
-                        elem.insert("#cdata".to_string(), Value::String(content));
-                    }
-                }
+                append_cdata_to_current(&mut stack, e.as_ref());
             }
             Ok(Event::Eof) => break,
             Ok(_) => {}
@@ -225,6 +243,25 @@ pub fn parse_xml_with_cdata(xml: &str) -> Result<Value, quick_xml::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn append_cdata_to_current_noops_on_empty_stack() {
+        // Defensive path: CDATA emitted with no open element (unreachable via quick-xml but
+        // the helper still handles it gracefully without panicking).
+        let mut stack: Vec<(String, Map<String, Value>)> = Vec::new();
+        append_cdata_to_current(&mut stack, b"ignored");
+        assert!(stack.is_empty());
+    }
+
+    #[test]
+    fn append_cdata_to_current_sets_and_appends() {
+        // First call sets `#cdata`; second call appends (covers both match arms).
+        let mut stack: Vec<(String, Map<String, Value>)> = vec![("r".to_string(), Map::new())];
+        append_cdata_to_current(&mut stack, b"one");
+        append_cdata_to_current(&mut stack, b"two");
+        let (_, elem) = stack.last().unwrap();
+        assert_eq!(elem.get("#cdata").and_then(|v| v.as_str()), Some("onetwo"));
+    }
 
     #[test]
     fn parse_xml_with_cdata_simple_element() {
@@ -386,6 +423,48 @@ mod tests {
         let r = v.get("r").and_then(|r| r.as_object()).unwrap();
         let arr = r.get("a").and_then(|a| a.as_array()).unwrap();
         assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn parse_text_value_non_finite_float_falls_through_to_string() {
+        // "NaN" parses as f64 but Number::from_f64 returns None - must fall through.
+        assert_eq!(parse_text_value("NaN", false).as_str(), Some("NaN"));
+        assert_eq!(parse_text_value("inf", false).as_str(), Some("inf"));
+    }
+
+    #[test]
+    fn parse_text_value_f64_leading_zero_non_decimal_stays_string() {
+        // "0e5" parses as f64 (0.0) but the guard rejects 0-leading non-decimals.
+        assert_eq!(parse_text_value("0e5", false).as_str(), Some("0e5"));
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_malformed_entity_between_tags_is_dropped() {
+        // A bare `&;` unescapes to an empty string - second empty-check returns without insert.
+        let v = parse_xml_with_cdata(r#"<r>&;</r>"#).unwrap();
+        let r = v.get("r").and_then(|r| r.as_object()).unwrap();
+        // Text collapses to nothing - no #text key
+        assert!(r.get("#text").is_none());
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_empty_root_element() {
+        // Self-closing root: Event::Empty at the top level (no parent on stack).
+        let v = parse_xml_with_cdata("<root/>").unwrap();
+        let root = v.get("root").and_then(|r| r.as_object()).unwrap();
+        assert!(root.is_empty());
+    }
+
+    #[test]
+    fn parse_xml_with_cdata_three_empty_siblings_extend_array() {
+        // Third duplicate empty sibling extends the existing array.
+        let v = parse_xml_with_cdata("<r><a/><a/><a/></r>").unwrap();
+        let arr = v
+            .get("r")
+            .and_then(|r| r.get("a"))
+            .and_then(|a| a.as_array())
+            .unwrap();
+        assert_eq!(arr.len(), 3);
     }
 
     #[test]

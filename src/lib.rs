@@ -1,6 +1,7 @@
 //! XML Disassembler - Disassemble large XML files into smaller files and reassemble the original XML.
 
 pub mod builders;
+pub mod cli;
 pub mod constants;
 pub mod handlers;
 pub mod multi_level;
