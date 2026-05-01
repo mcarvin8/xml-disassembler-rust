@@ -5,9 +5,9 @@
 [![CI](https://github.com/mcarvin8/xml-disassembler-rust/workflows/CI/badge.svg)](https://github.com/mcarvin8/xml-disassembler-rust/actions)
 [![codecov](https://codecov.io/gh/mcarvin8/xml-disassembler-rust/graph/badge.svg?token=FQ0E4PJWXU)](https://codecov.io/gh/mcarvin8/xml-disassembler-rust)
 
-Disassemble large XML files into smaller files and reassemble the original XML. Preserves the XML declaration, root namespace, and element order so that a full round-trip (disassemble → reassemble) reproduces the original file contents.
+> ⚠️ **Deprecated:** This crate is no longer maintained. All future development has moved to [config-disassembler](https://github.com/mcarvin8/config-disassembler) and its Node.js bindings at [config-disassembler-node](https://github.com/mcarvin8/config-disassembler-node).
 
-> **Note:** This crate is now the primary implementation of the xml-disassembler. The original [TypeScript](https://github.com/mcarvin8/xml-disassembler) project has been refactored into a Node.js wrapper that executes this Rust crate via [Neon](https://neon-rs.dev/).
+Disassemble large XML files into smaller files and reassemble the original XML. Preserves the XML declaration, root namespace, and element order so that a full round-trip (disassemble → reassemble) reproduces the original file contents.
 
 ---
 
